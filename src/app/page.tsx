@@ -8,12 +8,13 @@ import { KeywordTable } from '@/components/KeywordTable';
 import { VisualSearchTree } from '@/components/VisualSearchTree';
 import { ClusterBubbleMap } from '@/components/ClusterBubbleMap';
 import { HierarchicalClusterTree } from '@/components/HierarchicalClusterTree';
+import { SerpOverlapMatrix } from '@/components/SerpOverlapMatrix';
 import { ContentBriefModal } from '@/components/ContentBriefModal';
 import { LoadingState } from '@/components/LoadingState';
 import { EmptyState } from '@/components/EmptyState';
 import { FAQ } from '@/components/FAQ';
 import { KeywordItem, KeywordSummaryMetrics } from '@/lib/autocomplete';
-import { Sparkles, ShieldCheck, Globe, Zap, AlertCircle, Network, TableProperties, CircleDot, GitFork } from 'lucide-react';
+import { Sparkles, ShieldCheck, Globe, Zap, AlertCircle, Network, TableProperties, CircleDot, GitFork, Grid } from 'lucide-react';
 
 export default function Home() {
   const [activeParams, setActiveParams] = useState<SearchParams>({
@@ -31,7 +32,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState<boolean>(false);
-  const [activeView, setActiveView] = useState<'table' | 'bubbles' | 'hierarchy' | 'tree'>('table');
+  const [activeView, setActiveView] = useState<'table' | 'bubbles' | 'serp' | 'hierarchy' | 'tree'>('table');
   const [isBriefOpen, setIsBriefOpen] = useState<boolean>(false);
 
   const [filters, setFilters] = useState<FilterState>({
@@ -163,14 +164,14 @@ export default function Home() {
               <span className="font-extrabold text-lg text-slate-900 tracking-tight flex items-center gap-1.5">
                 Keyword Dominator <span className="text-xs bg-blue-100 text-blue-800 font-semibold px-2 py-0.5 rounded-full">Pro Suite</span>
               </span>
-              <p className="text-[11px] text-slate-500 font-medium">Multi-Platform Autocomplete &amp; Intent Intelligence</p>
+              <p className="text-[11px] text-slate-500 font-medium">Multi-Platform Autocomplete &amp; SERP Matrix Intelligence</p>
             </div>
           </div>
 
           <div className="hidden sm:flex items-center gap-3 text-xs font-semibold">
             <span className="inline-flex items-center gap-1.5 text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-200/60">
               <ShieldCheck className="w-4 h-4 text-emerald-600" />
-              100% Real Autocomplete Data
+              100% Real Autocomplete &amp; SERP Data
             </span>
           </div>
         </div>
@@ -182,13 +183,13 @@ export default function Home() {
         <section className="text-center space-y-3 max-w-3xl mx-auto">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-200/60 text-blue-700 text-xs font-bold tracking-wide uppercase">
             <Sparkles className="w-3.5 h-3.5" />
-            Universal Autocomplete Research Engine
+            Universal Autocomplete &amp; SERP Overlap Engine
           </div>
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-900 tracking-tight leading-tight">
             Discover Real <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">Search Autocomplete</span> Ideas
           </h1>
           <p className="text-base sm:text-lg text-slate-600 leading-relaxed font-normal">
-            Generate authentic long-tail keyword suggestions from Google, YouTube, Amazon &amp; Bing. Uncover search intent, explore interactive relationship trees, and export ready-to-rank content briefs.
+            Generate authentic long-tail keyword suggestions from Google, YouTube, Amazon &amp; Bing. Uncover search intent, explore interactive relationship trees, inspect live SERP overlaps, and export content briefs.
           </p>
         </section>
 
@@ -244,7 +245,7 @@ export default function Home() {
               {/* Top 7 Summary Metrics Containers in 1 Row */}
               {liveMetrics && <SummaryContainers metrics={liveMetrics} />}
 
-              {/* 4-Way Visualization View Switcher Bar */}
+              {/* 5-Way Visualization View Switcher Bar */}
               <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-2 rounded-xl border border-slate-200 shadow-2xs">
                 <div className="flex items-center gap-1.5 flex-wrap">
                   {/* 1. Table View */}
@@ -274,7 +275,21 @@ export default function Home() {
                     <span className="text-[10px] bg-purple-500/30 text-white px-1.5 py-0.2 rounded font-mono">Rank 1</span>
                   </button>
 
-                  {/* 3. Keyword -> Cluster Hierarchy Tree */}
+                  {/* 3. SERP Overlap Matrix */}
+                  <button
+                    onClick={() => setActiveView('serp')}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      activeView === 'serp'
+                        ? 'bg-amber-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Grid className="w-3.5 h-3.5" />
+                    <span>SERP Overlap Matrix</span>
+                    <span className="text-[10px] bg-amber-500/30 text-white px-1.5 py-0.2 rounded font-mono">Rank 2</span>
+                  </button>
+
+                  {/* 4. Keyword -> Cluster Hierarchy Tree */}
                   <button
                     onClick={() => setActiveView('hierarchy')}
                     className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
@@ -288,7 +303,7 @@ export default function Home() {
                     <span className="text-[10px] bg-emerald-500/30 text-white px-1.5 py-0.2 rounded font-mono">Rank 3</span>
                   </button>
 
-                  {/* 4. Radial Relationship Mindmap */}
+                  {/* 5. Radial Relationship Mindmap */}
                   <button
                     onClick={() => setActiveView('tree')}
                     className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
@@ -302,7 +317,7 @@ export default function Home() {
                   </button>
                 </div>
 
-                <div className="text-xs text-slate-500 font-medium hidden md:block">
+                <div className="text-xs text-slate-500 font-medium hidden lg:block">
                   Showing results for: <strong className="text-slate-800">{activeParams.query}</strong>
                 </div>
               </div>
@@ -337,7 +352,15 @@ export default function Home() {
                 />
               )}
 
-              {/* View 3: Keyword -> Cluster Hierarchy Tree (Rank 3) */}
+              {/* View 3: SERP Overlap Matrix (Rank 2) */}
+              {activeView === 'serp' && (
+                <SerpOverlapMatrix
+                  seed={activeParams.query}
+                  keywords={filteredKeywords}
+                />
+              )}
+
+              {/* View 4: Keyword -> Cluster Hierarchy Tree (Rank 3) */}
               {activeView === 'hierarchy' && (
                 <HierarchicalClusterTree
                   seed={activeParams.query}
@@ -345,7 +368,7 @@ export default function Home() {
                 />
               )}
 
-              {/* View 4: Radial Relationship Graph */}
+              {/* View 5: Radial Relationship Graph */}
               {activeView === 'tree' && (
                 <VisualSearchTree
                   seed={activeParams.query}
@@ -382,9 +405,9 @@ export default function Home() {
               <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
                 <Sparkles className="w-5 h-5" />
               </div>
-              <h3 className="text-base font-bold text-slate-900">Search Intent &amp; Content Briefs</h3>
+              <h3 className="text-base font-bold text-slate-900">Search Intent &amp; SERP Overlap</h3>
               <p className="text-sm text-slate-600 leading-relaxed">
-                Automatically classify queries into Informational, Commercial, and Transactional intents, and generate 1-click SEO content outlines.
+                Automatically classify queries into Informational, Commercial, and Transactional intents, and compare SERP ranking URLs to prevent keyword cannibalization.
               </p>
             </div>
 
