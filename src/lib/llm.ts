@@ -31,7 +31,7 @@ export interface LlmGapActionResponse {
   actionDescription: string;
 }
 
-async function callOpenRouter(prompt: string, systemPrompt: string = 'You are an expert SEO strategist. Output pure valid JSON.'): Promise<string | null> {
+async function callOpenRouterWithSearch(prompt: string, systemPrompt: string = 'You are an expert SEO strategist. Always output pure valid JSON without markdown wrapping.'): Promise<string | null> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
     console.warn('OPENROUTER_API_KEY is not configured');
@@ -49,12 +49,20 @@ async function callOpenRouter(prompt: string, systemPrompt: string = 'You are an
       },
       body: JSON.stringify({
         model: OPENROUTER_MODEL,
+        tools: [
+          {
+            type: 'openrouter:web_search',
+            parameters: {
+              engine: 'auto',
+              max_results: 5,
+            },
+          },
+        ],
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: prompt },
         ],
-        temperature: 0.3,
-        response_format: { type: 'json_object' },
+        temperature: 0.2,
       }),
     });
 
@@ -67,6 +75,12 @@ async function callOpenRouter(prompt: string, systemPrompt: string = 'You are an
     const data = await res.json();
     const content = data.choices?.[0]?.message?.content?.trim();
     if (!content) return null;
+
+    // Clean any backticks or markdown preamble if returned
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      return jsonMatch[0];
+    }
     return content.replace(/^```json\s*/i, '').replace(/\s*```$/i, '').trim();
   } catch (err) {
     console.error('OpenRouter fetch exception:', err);
@@ -75,13 +89,13 @@ async function callOpenRouter(prompt: string, systemPrompt: string = 'You are an
 }
 
 /**
- * 1. Content Brief Generator via LLM
+ * 1. Content Brief Generator with Real-Time Web Search for Genuine Google PAA
  */
 export async function generateLlmContentBrief(
   seed: string,
   rawKeywords: string[]
 ): Promise<LlmBriefResponse | null> {
-  const prompt = `Given the target seed keyword and a list of real Google autocomplete search queries, generate an authoritative content brief.
+  const prompt = `Use web_search to search Google for "${seed}" to discover the current People Also Ask (PAA) questions, search trends, and top ranking content structure.
 
 Target Seed Keyword: "${seed}"
 Discovered Autocomplete Queries:
@@ -90,7 +104,7 @@ ${rawKeywords.slice(0, 30).map((k) => `- ${k}`).join('\n')}
 Instructions:
 1. Write a compelling, click-worthy H1 title targeting the core intent.
 2. Group the discovered keywords into 5-7 logical, sequential H2 subheadings that thoroughly cover the topic without fluff.
-3. Select 4-6 genuine user questions that people ask about this topic. For each question, provide a concise, direct 2-sentence answer snippet optimized for Google Featured Snippets and FAQ Schema.
+3. Extract 4-6 genuine People Also Ask (PAA) user questions from Google search results. For each question, provide a concise, direct 2-sentence answer snippet optimized for Google Featured Snippets and FAQ Schema.
 4. Describe the target audience and primary content angle.
 
 Return ONLY valid JSON matching this exact structure:
@@ -107,11 +121,12 @@ Return ONLY valid JSON matching this exact structure:
   "targetAudience": "string"
 }`;
 
-  const jsonStr = await callOpenRouter(prompt);
+  const jsonStr = await callOpenRouterWithSearch(prompt);
   if (!jsonStr) return null;
   try {
     return JSON.parse(jsonStr) as LlmBriefResponse;
-  } catch {
+  } catch (err) {
+    console.error('Failed to parse LLM Brief JSON:', err, jsonStr);
     return null;
   }
 }
@@ -128,14 +143,14 @@ ${topQueries.slice(0, 10).map((q) => `- "${q.query}" (${q.impressions} imp, ${q.
 
 Generate an optimized HTML <title> tag (max 60 chars) and <meta name="description"> (max 155 chars) that will maximize organic CTR and align directly with the dominant search intent of these queries.
 
-Return ONLY valid JSON matching this exact structure:
+Return ONLY valid JSON:
 {
   "recommendedTitle": "Optimized Title Tag",
   "recommendedMeta": "Compelling Meta Description with clear value proposition and call to action.",
   "reason": "1-sentence strategic rationale explaining why this snippet will drive more clicks."
 }`;
 
-  const jsonStr = await callOpenRouter(prompt);
+  const jsonStr = await callOpenRouterWithSearch(prompt);
   if (!jsonStr) return null;
   try {
     return JSON.parse(jsonStr) as LlmTitleMetaResponse;
@@ -169,7 +184,7 @@ Return ONLY valid JSON:
   "actionableNotes": "Key elements to include."
 }`;
 
-  const jsonStr = await callOpenRouter(prompt);
+  const jsonStr = await callOpenRouterWithSearch(prompt);
   if (!jsonStr) return null;
   try {
     return JSON.parse(jsonStr) as LlmRescueResponse;
@@ -198,7 +213,7 @@ Return ONLY valid JSON:
   "actionDescription": "Strategic recommendation"
 }`;
 
-  const jsonStr = await callOpenRouter(prompt);
+  const jsonStr = await callOpenRouterWithSearch(prompt);
   if (!jsonStr) return null;
   try {
     return JSON.parse(jsonStr) as LlmGapActionResponse;
