@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Zap, Search, Target, Grid, FileText, ShieldCheck } from 'lucide-react';
+import { Zap, Search, Target, Grid, FileText } from 'lucide-react';
 
 export type MainNavTab = 'explorer' | 'content-gap' | 'serp-matrix' | 'content-brief';
 
@@ -111,11 +111,6 @@ export const Navbar: React.FC<NavbarProps> = ({
               <Target className="w-3.5 h-3.5 text-rose-600" />
               <span>Content Gap</span>
             </button>
-
-            <span className="hidden lg:inline-flex items-center gap-1.5 text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-200/60 text-xs font-semibold">
-              <ShieldCheck className="w-4 h-4 text-emerald-600" />
-              100% Real Autocomplete &amp; SERP Data
-            </span>
           </div>
         </div>
       </div>

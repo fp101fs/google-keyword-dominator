@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { Navbar, MainNavTab } from '@/components/Navbar';
 import { SearchForm, SearchParams } from '@/components/SearchForm';
 import { SummaryContainers } from '@/components/SummaryContainers';
@@ -21,7 +21,6 @@ import { EmptyState } from '@/components/EmptyState';
 import { FAQ } from '@/components/FAQ';
 import { KeywordItem, KeywordSummaryMetrics } from '@/lib/autocomplete';
 import {
-  Sparkles,
   ShieldCheck,
   Globe,
   AlertCircle,
@@ -37,6 +36,8 @@ import {
 
 export default function Home() {
   const [mainNavTab, setMainNavTab] = useState<MainNavTab>('explorer');
+  const resultsRef = useRef<HTMLElement | null>(null);
+
   const [activeParams, setActiveParams] = useState<SearchParams>({
     query: '',
     country: 'US',
@@ -122,6 +123,13 @@ export default function Home() {
         intent: 'all',
         subTab: 'all',
       });
+
+      // Smooth auto-scroll to the results section after results return
+      setTimeout(() => {
+        if (resultsRef.current) {
+          resultsRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 150);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'An unexpected error occurred while searching.';
       setError(message);
@@ -228,9 +236,9 @@ export default function Home() {
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 space-y-8">
         {/* Hero Header */}
         <section className="text-center space-y-3 max-w-3xl mx-auto">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-200/60 text-blue-700 text-xs font-bold tracking-wide uppercase">
-            <Sparkles className="w-3.5 h-3.5" />
-            Universal Autocomplete &amp; Ahrefs-Grade Explorer
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200/60 text-emerald-800 text-xs font-bold tracking-wide uppercase">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+            100% Real Autocomplete &amp; SERP Data
           </div>
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-900 tracking-tight leading-tight">
             Discover Real <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">Search Autocomplete</span> Ideas
@@ -266,7 +274,7 @@ export default function Home() {
         )}
 
         {/* Results Area */}
-        <section className="max-w-6xl mx-auto space-y-6">
+        <section ref={resultsRef} className="max-w-6xl mx-auto space-y-6 scroll-mt-24">
           {isLoading && (
             <LoadingState
               seed={activeParams.query}
@@ -508,7 +516,7 @@ export default function Home() {
 
             <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-2xs space-y-3">
               <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
-                <Sparkles className="w-5 h-5" />
+                <Network className="w-5 h-5" />
               </div>
               <h3 className="text-base font-bold text-slate-900">Ahrefs Content Gap Explorer</h3>
               <p className="text-sm text-slate-600 leading-relaxed">
@@ -518,7 +526,7 @@ export default function Home() {
 
             <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-2xs space-y-3">
               <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-                <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                <ShieldCheck className="w-5 h-5" />
               </div>
               <h3 className="text-base font-bold text-slate-900">100% Data Integrity</h3>
               <p className="text-sm text-slate-600 leading-relaxed">

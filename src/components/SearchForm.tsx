@@ -122,7 +122,7 @@ export const SearchForm: React.FC<SearchFormProps> = ({
 
         {/* Controls Row: Country, Language & Submit Button */}
         <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
-          {/* Country Selector */}
+          {/* Country Selector with Flags */}
           <div className="sm:col-span-4">
             <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
               Target Country
@@ -135,13 +135,13 @@ export const SearchForm: React.FC<SearchFormProps> = ({
             >
               {COUNTRIES.map((c) => (
                 <option key={c.code} value={c.code}>
-                  {c.name} ({c.code})
+                  {c.flag} {c.name} ({c.code})
                 </option>
               ))}
             </select>
           </div>
 
-          {/* Language Selector */}
+          {/* Language Selector with Flags */}
           <div className="sm:col-span-4">
             <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
               Interface Language
@@ -154,7 +154,7 @@ export const SearchForm: React.FC<SearchFormProps> = ({
             >
               {LANGUAGES.map((l) => (
                 <option key={l.code} value={l.code}>
-                  {l.name}
+                  {l.flag} {l.name}
                 </option>
               ))}
             </select>
