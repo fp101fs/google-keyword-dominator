@@ -59,10 +59,11 @@ export const SearchIntelligenceModal: React.FC<SearchIntelligenceModalProps> = (
   const [isLoadingGaps, setIsLoadingGaps] = useState<boolean>(false);
   const [selectedTierFilter, setSelectedTierFilter] = useState<string>('all');
 
-  // Page Expansion State
+  // Page Expansion State & Discovered Sitemap URLs
   const [expansionPlan, setExpansionPlan] = useState<PageExpansionPlan | null>(null);
   const [isLoadingExpansion, setIsLoadingExpansion] = useState<boolean>(false);
   const [selectedPageUrl, setSelectedPageUrl] = useState<string>('');
+  const [discoveredSitemapUrls, setDiscoveredSitemapUrls] = useState<string[]>([]);
 
   // Rankings Rescue State
   const [rescueTasks, setRescueTasks] = useState<RankingsRescueTask[]>([]);
@@ -77,6 +78,23 @@ export const SearchIntelligenceModal: React.FC<SearchIntelligenceModalProps> = (
     let isMounted = true;
 
     async function loadData() {
+      // 0. Auto-discover Sitemap URLs for Page Expansion dropdown
+      if (propertyTarget) {
+        try {
+          const sitemapRes = await fetch('/api/site-context', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: propertyTarget, sitemapOnly: true }),
+          });
+          const sitemapData = await sitemapRes.json();
+          if (isMounted && sitemapData.success && sitemapData.sitemap?.urls) {
+            setDiscoveredSitemapUrls(sitemapData.sitemap.urls);
+          }
+        } catch {
+          // Non-blocking fallback
+        }
+      }
+
       // 1. Search Opportunity Graph (100 Wins)
       setIsLoadingGraph(true);
       try {
@@ -223,6 +241,14 @@ Evidence:
 
   if (!isOpen) return null;
 
+  // Combine GSC ranking pages + discovered sitemap URLs
+  const allAvailablePageUrls = Array.from(
+    new Set([
+      ...(gscSnapshot?.pages || []).map((p) => p.url),
+      ...discoveredSitemapUrls,
+    ])
+  );
+
   return (
     <>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
@@ -334,7 +360,7 @@ Evidence:
               }`}
             >
               <FileText className="w-4 h-4" />
-              <span>3. Page Expansion</span>
+              <span>3. Page Expansion ({allAvailablePageUrls.length})</span>
             </button>
 
             {/* Tab 4: Rankings Rescue */}
@@ -366,7 +392,7 @@ Evidence:
                 ) : graph ? (
                   <div className="space-y-6 animate-fadeIn">
                     {/* Header Banner */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 bg-white border border-slate-200 rounded-2xl shadow-2xs">
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 p-4 bg-white border border-slate-200 rounded-2xl shadow-2xs">
                       <div className="flex items-center gap-3">
                         <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl">
                           <Layers className="w-5 h-5" />
@@ -392,8 +418,18 @@ Evidence:
                           <Compass className="w-5 h-5" />
                         </div>
                         <div>
-                          <span className="text-[10px] uppercase font-bold text-slate-400 block">Impression Opportunity</span>
+                          <span className="text-[10px] uppercase font-bold text-slate-400 block">Impression Potential</span>
                           <span className="text-lg font-black text-slate-900">{graph.totalSearchVolumePotential.toLocaleString()} Searches</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <div className="p-2.5 bg-purple-50 text-purple-600 rounded-xl">
+                          <Globe className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-slate-400 block">Sitemap Verified</span>
+                          <span className="text-lg font-black text-slate-900">{graph.sitemapUrlsCount} Pages</span>
                         </div>
                       </div>
                     </div>
@@ -431,6 +467,11 @@ Evidence:
                                 <p className="text-[11px] text-slate-500 truncate">
                                   Target Query: <code className="text-blue-600 font-semibold">{act.targetQuery}</code>
                                   {act.suggestedSlug && ` &bull; Slug: ${act.suggestedSlug}`}
+                                  {act.evidence.sitemapMatchedUrl && (
+                                    <span className="ml-2 text-teal-700 font-mono text-[10px] bg-teal-50 px-1.5 py-0.2 rounded border border-teal-200">
+                                      sitemap match: {act.evidence.sitemapMatchedUrl.split('/').pop() || 'page'}
+                                    </span>
+                                  )}
                                 </p>
                               </div>
                             </div>
@@ -483,7 +524,7 @@ Evidence:
                   <div>
                     <h4 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
                       <Sparkles className="w-4 h-4 text-blue-600" />
-                      Topical Gap Matrix: GSC Reality &times; Autocomplete Demand
+                      Topical Gap Matrix: GSC Reality &times; Autocomplete Demand &times; Sitemap
                     </h4>
                     <p className="text-xs text-slate-500">
                       Discovered {gapOpportunities.length} high-leverage search opportunities your site can rank for.
@@ -509,7 +550,7 @@ Evidence:
                 {isLoadingGaps ? (
                   <div className="py-16 text-center space-y-3">
                     <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto" />
-                    <p className="text-xs font-bold text-slate-700">Expanding GSC Queries via Autocomplete Matrix...</p>
+                    <p className="text-xs font-bold text-slate-700">Expanding GSC &amp; Sitemap Queries via Autocomplete Matrix...</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -575,19 +616,19 @@ Evidence:
                         Existing-Page Subtopic Expansion Engine
                       </h4>
                       <p className="text-xs text-slate-500">
-                        Turn ranking pages into comprehensive topical hubs by injecting high-demand missing subtopics.
+                        Turn ranking pages or discovered sitemap URLs into comprehensive topical hubs.
                       </p>
                     </div>
 
-                    {gscSnapshot?.pages && gscSnapshot.pages.length > 0 && (
+                    {allAvailablePageUrls.length > 0 && (
                       <select
                         value={selectedPageUrl}
                         onChange={(e) => setSelectedPageUrl(e.target.value)}
-                        className="p-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 cursor-pointer max-w-xs truncate"
+                        className="p-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 cursor-pointer max-w-sm truncate"
                       >
-                        {gscSnapshot.pages.map((p) => (
-                          <option key={p.url} value={p.url}>
-                            {p.url}
+                        {allAvailablePageUrls.map((url) => (
+                          <option key={url} value={url}>
+                            {url}
                           </option>
                         ))}
                       </select>
@@ -703,7 +744,7 @@ Evidence:
           {/* Modal Footer */}
           <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
             <span className="flex items-center gap-1.5">
-              <span>Search Opportunity Graph Engine &bull; DeepSeek AI</span>
+              <span>Search Opportunity Graph Engine &bull; DeepSeek AI &bull; Sitemap Grounded</span>
             </span>
             <button
               onClick={onClose}
@@ -812,6 +853,7 @@ Evidence:
           ]}
           isOpen={!!briefSeed}
           onClose={() => setBriefSeed(null)}
+          siteUrl={propertyTarget}
         />
       )}
     </>

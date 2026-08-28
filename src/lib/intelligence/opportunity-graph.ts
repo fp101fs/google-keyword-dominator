@@ -3,13 +3,15 @@
  * 
  * Simulates a website's next highest-leverage moves by joining:
  * 1. GSC ranking footprints (impressions, positions, CTR)
- * 2. Autocomplete cluster expansion (Google search demand)
- * 3. Topical authority graph analysis
- * 4. Transparent evidence chains ("Why This Exists")
+ * 2. Live Sitemap.xml URL structure (exact page existence check)
+ * 3. Autocomplete cluster expansion (Google search demand)
+ * 4. Topical authority graph analysis
+ * 5. Transparent evidence chains ("Why This Exists")
  */
 
 import { GscQueryItem } from '../gsc/types';
 import { getExpandedKeywords, normalizeKeyword } from '../autocomplete';
+import { fetchSiteSitemapUrls } from './site-context';
 
 export type ActionType =
   | 'create_pillar'
@@ -26,6 +28,7 @@ export interface EvidenceChain {
   rankingQueriesOnSite: number;
   uncoveredDemandQueries: number;
   topRankingUrl?: string;
+  sitemapMatchedUrl?: string;
   confidence: 'VERY HIGH' | 'HIGH' | 'MEDIUM';
   evidencePoints: string[];
   recommendation: string;
@@ -51,6 +54,7 @@ export interface SearchOpportunityGraph {
   totalWinsDiscovered: number;
   topicalClustersCount: number;
   totalSearchVolumePotential: number;
+  sitemapUrlsCount: number;
   actions: OpportunityAction[];
 }
 
@@ -63,7 +67,16 @@ export async function generateSearchOpportunityGraph(
   const actions: OpportunityAction[] = [];
   const cleanSite = siteUrl.replace(/^(sc-domain:|https?:\/\/)/, '').replace(/\/$/, '');
 
-  // 1. Group GSC queries by semantic topic & find primary clusters
+  // 1. Fetch live sitemap URLs for accurate page existence cross-referencing
+  let sitemapUrls: string[] = [];
+  try {
+    const sitemapData = await fetchSiteSitemapUrls(`https://${cleanSite}`);
+    sitemapUrls = sitemapData.urls;
+  } catch {
+    // Non-blocking fallback
+  }
+
+  // 2. Group GSC queries by semantic topic & find primary clusters
   const topQueries = [...gscQueries]
     .sort((a, b) => b.impressions - a.impressions)
     .slice(0, 15);
@@ -85,37 +98,78 @@ export async function generateSearchOpportunityGraph(
     const isStrikingDistance = row.position >= 10 && row.position <= 25;
     const isHighImpressionLowCtr = row.position < 10 && row.ctr < 0.03 && row.impressions > 500;
 
-    // Rule A: High Impression Page 2 Striking Distance -> Create Pillar or Sub-page
+    // Check if target topic already matches a page in sitemap.xml
+    const normSlug = norm.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    const matchedSitemapUrl = sitemapUrls.find((u) => {
+      const lowerU = u.toLowerCase();
+      return lowerU.includes(normSlug) || norm.split(' ').every((w) => lowerU.includes(w.toLowerCase()));
+    });
+
+    // Rule A: High Impression Page 2 Striking Distance
     if (isStrikingDistance && row.impressions > 300) {
-      const slug = `/${norm.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}/`;
-      actions.push({
-        id: `win-${rankCounter}`,
-        rank: rankCounter++,
-        actionType: 'create_pillar',
-        actionLabel: 'Create Dedicated Page',
-        actionBadgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300',
-        title: `Build dedicated hub for "${norm}"`,
-        targetQuery: norm,
-        suggestedSlug: slug,
-        estimatedTrafficImpact: '+++++',
-        estimatedImpactScore: 95,
-        evidence: {
-          relatedQueriesCount: relatedKwCount,
-          existingImpressions: row.impressions,
-          avgPosition: Number(row.position.toFixed(1)),
-          rankingQueriesOnSite: 1,
-          uncoveredDemandQueries: Math.max(5, relatedKwCount - 2),
-          topRankingUrl: row.page || `https://${cleanSite}`,
-          confidence: 'VERY HIGH',
-          evidencePoints: [
-            `${relatedKwCount} related Google autocomplete queries discovered in this cluster.`,
-            `Google already awards your domain ${row.impressions.toLocaleString()} search impressions for "${norm}".`,
-            `Current average rank is Position #${row.position.toFixed(1)} without a dedicated topical landing page.`,
-            `Topical demand indicates high commercial intent with ${expanded.keywords.filter(k => k.intent === 'commercial').length} buying-stage queries.`
-          ],
-          recommendation: `Create a dedicated authoritative page at "${slug}". Consolidate related sub-queries into H2 subheadings rather than publishing separate thin articles.`
-        }
-      });
+      if (matchedSitemapUrl) {
+        // Page already exists in sitemap -> Optimize existing page
+        actions.push({
+          id: `win-${rankCounter}`,
+          rank: rankCounter++,
+          actionType: 'optimize_page',
+          actionLabel: 'Optimize Existing Page',
+          actionBadgeClass: 'bg-teal-100 text-teal-800 border-teal-300',
+          title: `Expand & refresh existing page for "${norm}"`,
+          targetQuery: norm,
+          targetPageUrl: matchedSitemapUrl,
+          estimatedTrafficImpact: '+++++',
+          estimatedImpactScore: 96,
+          evidence: {
+            relatedQueriesCount: relatedKwCount,
+            existingImpressions: row.impressions,
+            avgPosition: Number(row.position.toFixed(1)),
+            rankingQueriesOnSite: 1,
+            uncoveredDemandQueries: Math.max(3, relatedKwCount - 4),
+            topRankingUrl: matchedSitemapUrl,
+            sitemapMatchedUrl: matchedSitemapUrl,
+            confidence: 'VERY HIGH',
+            evidencePoints: [
+              `Live sitemap verified published page at "${matchedSitemapUrl}".`,
+              `${relatedKwCount} related Google autocomplete queries discovered in this cluster.`,
+              `Google awards your domain ${row.impressions.toLocaleString()} impressions ranking #${row.position.toFixed(1)}.`,
+              `Updating existing content is 3x faster to rank than launching a new URL.`
+            ],
+            recommendation: `Add missing subtopics and FAQ schema to "${matchedSitemapUrl}" to lift it onto Page 1.`
+          }
+        });
+      } else {
+        // Page NOT in sitemap -> Create new dedicated pillar
+        const slug = `/${norm.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}/`;
+        actions.push({
+          id: `win-${rankCounter}`,
+          rank: rankCounter++,
+          actionType: 'create_pillar',
+          actionLabel: 'Create Dedicated Page',
+          actionBadgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+          title: `Build dedicated hub for "${norm}"`,
+          targetQuery: norm,
+          suggestedSlug: slug,
+          estimatedTrafficImpact: '+++++',
+          estimatedImpactScore: 94,
+          evidence: {
+            relatedQueriesCount: relatedKwCount,
+            existingImpressions: row.impressions,
+            avgPosition: Number(row.position.toFixed(1)),
+            rankingQueriesOnSite: 1,
+            uncoveredDemandQueries: Math.max(5, relatedKwCount - 2),
+            topRankingUrl: row.page || `https://${cleanSite}`,
+            confidence: 'VERY HIGH',
+            evidencePoints: [
+              `No dedicated page detected in sitemap.xml for "${norm}".`,
+              `${relatedKwCount} related Google autocomplete queries discovered in this cluster.`,
+              `Google already awards your domain ${row.impressions.toLocaleString()} search impressions for this topic.`,
+              `Current average rank is Position #${row.position.toFixed(1)} without a dedicated topical landing page.`
+            ],
+            recommendation: `Create a dedicated authoritative page at "${slug}". Consolidate related sub-queries into H2 subheadings rather than publishing separate thin articles.`
+          }
+        });
+      }
     }
 
     // Rule B: Low CTR on Page 1 -> Title & Snippet CTR Optimization
@@ -128,7 +182,7 @@ export async function generateSearchOpportunityGraph(
         actionBadgeClass: 'bg-rose-100 text-rose-800 border-rose-300',
         title: `Rewrite Title Tag & Meta for "${norm}"`,
         targetQuery: norm,
-        targetPageUrl: row.page || `https://${cleanSite}`,
+        targetPageUrl: matchedSitemapUrl || row.page || `https://${cleanSite}`,
         estimatedTrafficImpact: '+++++',
         estimatedImpactScore: 92,
         evidence: {
@@ -137,7 +191,7 @@ export async function generateSearchOpportunityGraph(
           avgPosition: Number(row.position.toFixed(1)),
           rankingQueriesOnSite: 1,
           uncoveredDemandQueries: 0,
-          topRankingUrl: row.page || `https://${cleanSite}`,
+          topRankingUrl: matchedSitemapUrl || row.page || `https://${cleanSite}`,
           confidence: 'HIGH',
           evidencePoints: [
             `Page ranks in the Top 10 (Position #${row.position.toFixed(1)}) with ${row.impressions.toLocaleString()} impressions.`,
@@ -164,7 +218,7 @@ export async function generateSearchOpportunityGraph(
         actionBadgeClass: 'bg-indigo-100 text-indigo-800 border-indigo-300',
         title: `Add 3-Question FAQ Schema block to "${norm}"`,
         targetQuery: norm,
-        targetPageUrl: row.page || `https://${cleanSite}`,
+        targetPageUrl: matchedSitemapUrl || row.page || `https://${cleanSite}`,
         estimatedTrafficImpact: '++++',
         estimatedImpactScore: 84,
         evidence: {
@@ -173,7 +227,7 @@ export async function generateSearchOpportunityGraph(
           avgPosition: Number(row.position.toFixed(1)),
           rankingQueriesOnSite: 1,
           uncoveredDemandQueries: questionQueries.length,
-          topRankingUrl: row.page || `https://${cleanSite}`,
+          topRankingUrl: matchedSitemapUrl || row.page || `https://${cleanSite}`,
           confidence: 'HIGH',
           evidencePoints: [
             `Discovered ${questionQueries.length} exact user question queries in Google autocomplete.`,
@@ -232,6 +286,7 @@ export async function generateSearchOpportunityGraph(
     totalWinsDiscovered: actions.length,
     topicalClustersCount: topQueries.length,
     totalSearchVolumePotential: actions.reduce((acc, a) => acc + a.evidence.existingImpressions, 0),
+    sitemapUrlsCount: sitemapUrls.length,
     actions: actions.slice(0, 100),
   };
 }

@@ -1,6 +1,7 @@
 import { GscQueryItem, GscPageItem } from '../gsc/types';
 import { GscGapOpportunity, OpportunityTier } from './types';
 import { getExpandedKeywords } from '../autocomplete';
+import { fetchSiteSitemapUrls } from './site-context';
 
 /**
  * Extract topic keywords from URL slugs (e.g. "/blog/best-ai-audio-to-video-tools" -> "ai audio to video tools")
@@ -9,12 +10,12 @@ function extractTopicFromUrl(url: string): string | null {
   try {
     const pathname = new URL(url).pathname;
     const clean = pathname
-      .replace(/^\/(blog|articles|posts|p|guide|product)\//i, '')
+      .replace(/^\/(blog|articles|posts|p|guide|product|compare)\//i, '')
       .replace(/\//g, ' ')
       .replace(/[-_]/g, ' ')
       .trim();
 
-    if (!clean || clean.length < 3 || clean === 'dashboard' || clean === 'login' || clean === 'index') {
+    if (!clean || clean.length < 3 || clean === 'dashboard' || clean === 'login' || clean === 'index' || clean === 'pricing') {
       return null;
     }
 
@@ -60,13 +61,14 @@ function isRelevantQueryExpansion(seed: string, suggestion: string): boolean {
 }
 
 /**
- * Computes GSC Gap Opportunities purely with real Google search data.
+ * Computes GSC Gap Opportunities purely with real Google search data & sitemap intelligence.
  */
 export async function computeGscGapOpportunities(
   gscQueries: GscQueryItem[],
   gscPages: GscPageItem[] = [],
   country: string = 'US',
-  language: string = 'en'
+  language: string = 'en',
+  siteUrl?: string
 ): Promise<GscGapOpportunity[]> {
   const opportunities: GscGapOpportunity[] = [];
   const gscQueryMap = new Map<string, GscQueryItem>();
@@ -93,8 +95,20 @@ export async function computeGscGapOpportunities(
     }
   });
 
-  // 2. Build intelligent seed list:
+  // 2. Discover Sitemap URLs for fresh / new websites to extract topic seeds
   const candidateSeeds = new Set<string>();
+
+  if (siteUrl && siteUrl.trim()) {
+    try {
+      const sitemap = await fetchSiteSitemapUrls(siteUrl);
+      sitemap.urls.forEach((u) => {
+        const topic = extractTopicFromUrl(u);
+        if (topic) candidateSeeds.add(topic);
+      });
+    } catch {
+      // Non-blocking fallback
+    }
+  }
 
   gscQueries.forEach((q) => {
     const trimmed = q.query.trim();
@@ -128,92 +142,95 @@ export async function computeGscGapOpportunities(
         includePrepositions: true,
       });
 
-      expandedItems.forEach((item) => {
-        const normKw = item.keyword.toLowerCase().trim();
+      for (const item of expandedItems) {
+        const sugQuery = item.keyword.trim();
+        const normSug = sugQuery.toLowerCase();
 
-        if (!isRelevantQueryExpansion(item.seedKeyword, item.keyword)) {
-          return;
+        if (opportunities.some((o) => o.query.toLowerCase() === normSug)) {
+          continue;
         }
 
-        const existingGsc = gscQueryMap.get(normKw);
+        const sourceSeed = item.seedKeyword || topSeeds[0];
+        if (!isRelevantQueryExpansion(sourceSeed, sugQuery)) {
+          continue;
+        }
 
-        if (existingGsc) {
-          if (existingGsc.position >= 8 && existingGsc.position <= 25) {
+        const exactGscMatch = gscQueryMap.get(normSug);
+
+        if (exactGscMatch) {
+          if (exactGscMatch.position >= 10 && exactGscMatch.position <= 20) {
             opportunities.push({
-              query: item.keyword,
-              sourceGscQuery: item.seedKeyword,
+              query: exactGscMatch.query,
+              sourceGscQuery: sourceSeed,
               tier: 'green_striking',
-              tierLabel: 'Striking Distance (Pos 8-25)',
+              tierLabel: 'Page 2 Striking Distance (Pos 11-20)',
               tierBadgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300',
-              tierDescription: `Already ranking #${existingGsc.position} with ${existingGsc.impressions.toLocaleString()} impressions.`,
-              impressions: existingGsc.impressions,
-              clicks: existingGsc.clicks,
-              position: existingGsc.position,
-              ctr: existingGsc.ctr,
-              page: existingGsc.page,
+              tierDescription: `Already ranking #${exactGscMatch.position.toFixed(1)} with ${exactGscMatch.impressions.toLocaleString()} impressions. Add dedicated H2 section or improve content depth to break onto Page 1.`,
+              impressions: exactGscMatch.impressions,
+              clicks: exactGscMatch.clicks,
+              position: exactGscMatch.position,
+              ctr: exactGscMatch.ctr,
+              page: exactGscMatch.page,
               autocompleteScore: item.relativeScore,
-              recommendedAction: 'Page 1 Target',
+              recommendedAction: 'Add H2 Section / Refresh Content',
             });
-          } else if (existingGsc.impressions >= 100) {
+          } else if (exactGscMatch.impressions >= 1000 && exactGscMatch.position > 20) {
             opportunities.push({
-              query: item.keyword,
-              sourceGscQuery: item.seedKeyword,
+              query: exactGscMatch.query,
+              sourceGscQuery: sourceSeed,
               tier: 'green_impressions',
-              tierLabel: 'Google Associated Topic',
+              tierLabel: 'High Demand Keyword (1,000+ Imp)',
               tierBadgeClass: 'bg-teal-100 text-teal-800 border-teal-300',
-              tierDescription: `Google associates this query with your domain (${existingGsc.impressions.toLocaleString()} impressions).`,
-              impressions: existingGsc.impressions,
-              clicks: existingGsc.clicks,
-              position: existingGsc.position,
-              ctr: existingGsc.ctr,
-              page: existingGsc.page,
+              tierDescription: `High search volume (${exactGscMatch.impressions.toLocaleString()} impressions) ranking #${exactGscMatch.position.toFixed(1)}.`,
+              impressions: exactGscMatch.impressions,
+              clicks: exactGscMatch.clicks,
+              position: exactGscMatch.position,
+              ctr: exactGscMatch.ctr,
+              page: exactGscMatch.page,
               autocompleteScore: item.relativeScore,
-              recommendedAction: 'Reinforce Topic',
+              recommendedAction: 'Build Dedicated Supporting Page',
             });
           }
         } else {
-          // Top non-branded autocomplete demand (YELLOW TIER)
-          if (item.relativeScore >= 60) {
+          // Autocomplete suggestion NOT in GSC (New topic demand)
+          if (item.relativeScore >= 50 && item.ap <= 6) {
             opportunities.push({
-              query: item.keyword,
-              sourceGscQuery: item.seedKeyword,
+              query: sugQuery,
+              sourceGscQuery: sourceSeed,
               tier: 'yellow_new_content',
-              tierLabel: 'High Demand • Zero GSC Coverage',
-              tierBadgeClass: 'bg-amber-100 text-amber-900 border-amber-300',
-              tierDescription: `High autocomplete search demand with 0 impressions on your site.`,
+              tierLabel: 'New Content Opportunity (0 GSC Footprint)',
+              tierBadgeClass: 'bg-amber-100 text-amber-800 border-amber-300',
+              tierDescription: `Google users are actively typing "${sugQuery}" (${item.apFormatted} AP suggestion rank), but your domain has 0 search impressions.`,
               impressions: 0,
               clicks: 0,
               position: 0,
               ctr: 0,
               autocompleteScore: item.relativeScore,
-              recommendedAction: 'New Content Target',
+              recommendedAction: 'Write New Article / Target Seed',
             });
           }
         }
-      });
+      }
     } catch (err) {
-      console.error('Autocomplete expansion error for queries:', topSeeds, err);
+      console.error('Failed to compute expanded GSC gaps:', err);
     }
   }
 
-  const seen = new Set<string>();
-  const uniqueList = opportunities.filter((op) => {
-    if (seen.has(op.query.toLowerCase())) return false;
-    seen.add(op.query.toLowerCase());
-    return true;
-  });
-
+  // Deduplicate and rank
   const tierWeight: Record<OpportunityTier, number> = {
-    green_striking: 100,
-    red_low_ctr: 85,
-    green_impressions: 70,
-    yellow_new_content: 60,
-    orange_cannibalization: 50,
+    green_striking: 50,
+    green_impressions: 40,
+    red_low_ctr: 30,
+    yellow_new_content: 20,
+    orange_cannibalization: 10,
   };
 
-  return uniqueList.sort((a, b) => {
-    const scoreA = (tierWeight[a.tier] || 0) * 100 + a.impressions;
-    const scoreB = (tierWeight[b.tier] || 0) * 100 + b.impressions;
-    return scoreB - scoreA;
-  });
+  return opportunities
+    .sort((a, b) => {
+      const weightA = tierWeight[a.tier] || 0;
+      const weightB = tierWeight[b.tier] || 0;
+      if (weightA !== weightB) return weightB - weightA;
+      return b.autocompleteScore - a.autocompleteScore;
+    })
+    .slice(0, 50);
 }

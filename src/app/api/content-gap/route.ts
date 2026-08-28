@@ -3,6 +3,7 @@ import { getExpandedKeywords, normalizeKeyword, KeywordItem } from '@/lib/autoco
 import { computeContentGap } from '@/lib/content-gap';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { synthesizeCompetitorGapWithLlm } from '@/lib/llm';
+import { fetchSiteSitemapUrls } from '@/lib/intelligence/site-context';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -50,16 +51,30 @@ export async function POST(req: NextRequest) {
       language,
     });
 
-    // 2. Fetch Competitors seed keywords
+    // 2. Fetch Competitors seed keywords + check for competitor sitemaps
     const competitorMap: Record<string, KeywordItem[]> = {};
+    const competitorSitemaps: Record<string, string[]> = {};
+
     await Promise.all(
       cleanCompetitors.map(async (comp) => {
-        const res = await getExpandedKeywords({
+        const resPromise = getExpandedKeywords({
           seeds: [comp],
           country,
           language,
         });
+
+        // If competitor looks like a domain (e.g. "descript.com" or "descript"), check sitemap
+        let sitemapPromise: Promise<{ sitemapUrl?: string; urls: string[] }> = Promise.resolve({ urls: [] });
+        if (comp.includes('.') || !comp.includes(' ')) {
+          const compDomain = comp.includes('.') ? comp : `${comp}.com`;
+          sitemapPromise = fetchSiteSitemapUrls(`https://${compDomain}`).catch(() => ({ urls: [] }));
+        }
+
+        const [res, sitemap] = await Promise.all([resPromise, sitemapPromise]);
         competitorMap[comp] = res.keywords;
+        if (sitemap.urls.length > 0) {
+          competitorSitemaps[comp] = sitemap.urls.slice(0, 10);
+        }
       })
     );
 
@@ -79,6 +94,7 @@ export async function POST(req: NextRequest) {
       success: true,
       data: gapAnalysis,
       llmStrategy,
+      competitorSitemaps,
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to analyze content gap';
