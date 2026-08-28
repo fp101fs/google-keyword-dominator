@@ -666,6 +666,7 @@ export default function Home() {
         keywords={filteredKeywords}
         isOpen={isBriefOpen}
         onClose={() => setIsBriefOpen(false)}
+        siteUrl={selectedProperty || gscSnapshot?.property}
       />
 
       {/* Ahrefs Content Gap Modal */}

@@ -9,7 +9,16 @@ export const dynamic = 'force-dynamic';
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { seed, keywords } = body as { seed?: string; keywords?: KeywordItem[] };
+    const { seed, keywords, siteContext } = body as {
+      seed?: string;
+      keywords?: KeywordItem[];
+      siteContext?: {
+        siteName?: string;
+        businessType?: string;
+        targetAudience?: string;
+        situationalSummary?: string;
+      };
+    };
 
     const normalizedSeed = normalizeKeyword(seed || '');
     if (!normalizedSeed) {
@@ -23,9 +32,9 @@ export async function POST(req: NextRequest) {
     // 1. Base structured brief from raw autocomplete queries
     const brief = generateContentBrief(normalizedSeed, keywords);
 
-    // 2. Call genuine LLM to generate intelligent H1, cohesive H2 narrative, and direct FAQ answers
+    // 2. Call genuine LLM with optional site context & live Google PAA search
     const rawKeywordsList = keywords.map((k) => k.keyword);
-    const llmResult = await generateLlmContentBrief(normalizedSeed, rawKeywordsList);
+    const llmResult = await generateLlmContentBrief(normalizedSeed, rawKeywordsList, siteContext);
 
     return NextResponse.json({
       success: true,

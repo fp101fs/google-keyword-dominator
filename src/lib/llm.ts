@@ -153,20 +153,29 @@ async function callOpenRouterWithWebFetch(url: string, prompt: string): Promise<
 }
 
 /**
- * 1. Content Brief Generator with Real-Time Web Search for Genuine Google PAA
+ * 1. Content Brief Generator with Real-Time Web Search and Optional Site Context
  */
 export async function generateLlmContentBrief(
   seed: string,
-  rawKeywords: string[]
+  rawKeywords: string[],
+  siteContext?: { siteName?: string; businessType?: string; targetAudience?: string; situationalSummary?: string }
 ): Promise<LlmBriefResponse | null> {
+  const contextSnippet = siteContext?.situationalSummary
+    ? `\nClient Website Context:
+- Brand/Site Name: ${siteContext.siteName || 'Not specified'}
+- Business Type: ${siteContext.businessType || 'Website'}
+- Target Audience: ${siteContext.targetAudience || 'General Audience'}
+- Situational Knowledge: ${siteContext.situationalSummary}\nEnsure this brief directly reflects this business's specific situation and tone.`
+    : '';
+
   const prompt = `Use web_search to search Google for "${seed}" to discover the current People Also Ask (PAA) questions, search trends, and top ranking content structure.
 
-Target Seed Keyword: "${seed}"
+Target Seed Keyword: "${seed}"${contextSnippet}
 Discovered Autocomplete Queries:
 ${rawKeywords.slice(0, 30).map((k) => `- ${k}`).join('\n')}
 
 Instructions:
-1. Write a compelling, click-worthy H1 title targeting the core intent.
+1. Write a compelling, click-worthy H1 title targeting the core intent (tailored to the business if context was provided).
 2. Group the discovered keywords into 5-7 logical, sequential H2 subheadings that thoroughly cover the topic without fluff.
 3. Extract 4-6 genuine People Also Ask (PAA) user questions from Google search results. For each question, provide a concise, direct 2-sentence answer snippet optimized for Google Featured Snippets and FAQ Schema.
 4. Describe the target audience and primary content angle.
