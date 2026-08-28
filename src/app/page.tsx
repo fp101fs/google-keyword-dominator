@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
+import { Navbar, MainNavTab } from '@/components/Navbar';
 import { SearchForm, SearchParams } from '@/components/SearchForm';
 import { SummaryContainers } from '@/components/SummaryContainers';
 import { KeywordFilters, FilterState } from '@/components/KeywordFilters';
@@ -23,7 +24,6 @@ import {
   Sparkles,
   ShieldCheck,
   Globe,
-  Zap,
   AlertCircle,
   Network,
   TableProperties,
@@ -33,10 +33,10 @@ import {
   ScatterChart,
   LayoutGrid,
   Share2,
-  Target,
 } from 'lucide-react';
 
 export default function Home() {
+  const [mainNavTab, setMainNavTab] = useState<MainNavTab>('explorer');
   const [activeParams, setActiveParams] = useState<SearchParams>({
     query: '',
     country: 'US',
@@ -69,13 +69,28 @@ export default function Home() {
     maxScore: 100,
     selectedSource: 'all',
     intent: 'all',
+    subTab: 'all',
   });
+
+  const handleSelectNavTab = (tab: MainNavTab) => {
+    setMainNavTab(tab);
+    if (tab === 'content-gap') {
+      setIsGapOpen(true);
+    } else if (tab === 'content-brief') {
+      setIsBriefOpen(true);
+    } else if (tab === 'serp-matrix') {
+      setActiveView('serp');
+    } else if (tab === 'explorer') {
+      setActiveView('table');
+    }
+  };
 
   const handleSearch = async (params: SearchParams) => {
     setActiveParams(params);
     setIsLoading(true);
     setError(null);
     setHasSearched(true);
+    setMainNavTab('explorer');
 
     try {
       const url = new URL('/api/keywords', window.location.origin);
@@ -105,6 +120,7 @@ export default function Home() {
         maxScore: 100,
         selectedSource: 'all',
         intent: 'all',
+        subTab: 'all',
       });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'An unexpected error occurred while searching.';
@@ -132,10 +148,32 @@ export default function Home() {
     return Array.from(set).sort();
   }, [keywords]);
 
-  // Apply filters
+  // Apply filters including Ahrefs sub-navigation tabs
   const filteredKeywords = useMemo(() => {
     return keywords.filter((item) => {
-      if (filters.search && !item.keyword.toLowerCase().includes(filters.search.toLowerCase())) {
+      const kw = item.keyword.toLowerCase();
+      // SubTab Filtering
+      if (filters.subTab === 'matching') {
+        if (!kw.includes(activeParams.query.toLowerCase())) return false;
+      } else if (filters.subTab === 'questions') {
+        if (
+          !/^(how|what|why|where|when|who|which|can|is|are)/i.test(kw) &&
+          !item.sources.some((s) => s.startsWith('question-'))
+        ) {
+          return false;
+        }
+      } else if (filters.subTab === 'comparisons') {
+        if (!/\b(vs|best|top|or|versus|alternative|review)\b/i.test(kw)) return false;
+      } else if (filters.subTab === 'prepositions') {
+        if (
+          !/\b(for|with|without|near|to|in|on|like|under)\b/i.test(kw) &&
+          !item.sources.some((s) => s.startsWith('prep-'))
+        ) {
+          return false;
+        }
+      }
+
+      if (filters.search && !kw.includes(filters.search.toLowerCase())) {
         return false;
       }
       if (filters.intent !== 'all' && item.intent !== filters.intent) {
@@ -151,7 +189,7 @@ export default function Home() {
       }
       return true;
     });
-  }, [keywords, filters]);
+  }, [keywords, filters, activeParams.query]);
 
   // Dynamic live metrics based on filtered results
   const liveMetrics = useMemo((): KeywordSummaryMetrics | null => {
@@ -179,38 +217,13 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-50 text-slate-900 flex flex-col font-sans selection:bg-blue-100 selection:text-blue-900">
-      {/* Top Navigation */}
-      <header className="border-b border-slate-200/80 bg-white/80 backdrop-blur-md sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
-              <Zap className="w-5 h-5" />
-            </div>
-            <div>
-              <span className="font-extrabold text-lg text-slate-900 tracking-tight flex items-center gap-1.5">
-                Keyword Dominator <span className="text-xs bg-blue-100 text-blue-800 font-semibold px-2 py-0.5 rounded-full">Ahrefs Pro Suite</span>
-              </span>
-              <p className="text-[11px] text-slate-500 font-medium">Multi-Platform Autocomplete &amp; Competitor Gap Intelligence</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2.5">
-            {/* Global Navbar Ahrefs Content Gap Button */}
-            <button
-              onClick={() => setIsGapOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl shadow-xs transition-all cursor-pointer"
-            >
-              <Target className="w-4 h-4 text-rose-600" />
-              <span>🎯 Ahrefs Content Gap</span>
-            </button>
-
-            <span className="hidden md:inline-flex items-center gap-1.5 text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-200/60 text-xs font-semibold">
-              <ShieldCheck className="w-4 h-4 text-emerald-600" />
-              100% Real Autocomplete Data
-            </span>
-          </div>
-        </div>
-      </header>
+      {/* Permanent Main Navigation Bar */}
+      <Navbar
+        activeTab={mainNavTab}
+        onSelectTab={handleSelectNavTab}
+        onOpenContentGap={() => setIsGapOpen(true)}
+        onOpenContentBrief={() => setIsBriefOpen(true)}
+      />
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 space-y-8">
@@ -234,6 +247,7 @@ export default function Home() {
             onSearch={handleSearch}
             isLoading={isLoading}
             initialParams={activeParams}
+            onOpenContentGap={() => setIsGapOpen(true)}
           />
         </section>
 
@@ -387,15 +401,6 @@ export default function Home() {
                     <span>Radial Graph</span>
                   </button>
                 </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setIsGapOpen(true)}
-                    className="text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-1.5 rounded-lg transition-all cursor-pointer"
-                  >
-                    🎯 Content Gap
-                  </button>
-                </div>
               </div>
 
               {/* View 1: Table View */}
@@ -515,7 +520,7 @@ export default function Home() {
 
             <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-2xs space-y-3">
               <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-                <ShieldCheck className="w-5 h-5" />
+                <ShieldCheck className="w-4 h-4 text-emerald-600" />
               </div>
               <h3 className="text-base font-bold text-slate-900">100% Data Integrity</h3>
               <p className="text-sm text-slate-600 leading-relaxed">
