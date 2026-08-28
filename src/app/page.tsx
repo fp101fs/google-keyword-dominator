@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { Navbar, MainNavTab } from '@/components/Navbar';
 import { SearchForm, SearchParams } from '@/components/SearchForm';
 import { SummaryContainers } from '@/components/SummaryContainers';
@@ -21,7 +21,7 @@ import { LoadingState } from '@/components/LoadingState';
 import { EmptyState } from '@/components/EmptyState';
 import { FAQ } from '@/components/FAQ';
 import { KeywordItem, KeywordSummaryMetrics } from '@/lib/autocomplete';
-import { GscConnectedSnapshot } from '@/lib/gsc/types';
+import { GscConnectedSnapshot, GscProperty } from '@/lib/gsc/types';
 import {
   ShieldCheck,
   Globe,
@@ -61,6 +61,9 @@ export default function Home() {
 
   // GSC State
   const [gscSnapshot, setGscSnapshot] = useState<GscConnectedSnapshot | null>(null);
+  const [gscProperties, setGscProperties] = useState<GscProperty[]>([]);
+  const [selectedProperty, setSelectedProperty] = useState<string>('');
+  const [isAuthenticatedGsc, setIsAuthenticatedGsc] = useState<boolean>(false);
   const [isGscModalOpen, setIsGscModalOpen] = useState<boolean>(false);
   const [isLoadingGsc, setIsLoadingGsc] = useState<boolean>(false);
 
@@ -79,6 +82,58 @@ export default function Home() {
     intent: 'all',
     subTab: 'all',
   });
+
+  const loadRealSnapshot = useCallback(async (siteUrl: string) => {
+    setIsLoadingGsc(true);
+    try {
+      const res = await fetch(`/api/gsc/snapshot?siteUrl=${encodeURIComponent(siteUrl)}`);
+      const data = await res.json();
+      if (data.success && data.snapshot) {
+        setGscSnapshot(data.snapshot);
+      }
+    } catch {
+      // Error loading snapshot
+    } finally {
+      setIsLoadingGsc(false);
+    }
+  }, []);
+
+  // Auto-check GSC login status on mount
+  useEffect(() => {
+    async function checkGscAuth() {
+      try {
+        const res = await fetch('/api/gsc/properties');
+        const data = await res.json();
+        if (data.authenticated && data.properties?.length > 0) {
+          setIsAuthenticatedGsc(true);
+          setGscProperties(data.properties);
+          const firstProp = data.properties[0].siteUrl;
+          setSelectedProperty(firstProp);
+          loadRealSnapshot(firstProp);
+        }
+      } catch {
+        // Not logged in
+      }
+    }
+    checkGscAuth();
+  }, [loadRealSnapshot]);
+
+  const handleSelectProperty = (siteUrl: string) => {
+    setSelectedProperty(siteUrl);
+    loadRealSnapshot(siteUrl);
+  };
+
+  const handleLogoutGsc = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      setIsAuthenticatedGsc(false);
+      setGscSnapshot(null);
+      setGscProperties([]);
+      setSelectedProperty('');
+    } catch {
+      // Logout error
+    }
+  };
 
   const handleSelectNavTab = (tab: MainNavTab) => {
     setMainNavTab(tab);
@@ -102,6 +157,8 @@ export default function Home() {
       const data = await res.json();
       if (data.success) {
         setGscSnapshot(data.snapshot);
+        setIsAuthenticatedGsc(true);
+        setSelectedProperty(data.snapshot.property);
       }
     } catch {
       // Demo load error fallback
@@ -577,6 +634,11 @@ export default function Home() {
         connectedSnapshot={gscSnapshot}
         onConnectDemo={handleConnectGscDemo}
         isLoadingGsc={isLoadingGsc}
+        properties={gscProperties}
+        selectedProperty={selectedProperty}
+        onSelectProperty={handleSelectProperty}
+        isAuthenticated={isAuthenticatedGsc}
+        onLogout={handleLogoutGsc}
         onSelectQueryForExpansion={(q) => handleSuggestionClick(q)}
       />
 
