@@ -3,9 +3,46 @@ import { GscGapOpportunity, OpportunityTier } from './types';
 import { getExpandedKeywords } from '../autocomplete';
 
 /**
+ * Filter out brand typos, fuzzy partial word collisions (e.g. "wavre battle", "wavrek", "wavreshop" for "wavreel")
+ * Genuine autocomplete expansion must contain the full seed token as a distinct word or valid compound prefix.
+ */
+function isRelevantQueryExpansion(seed: string, suggestion: string): boolean {
+  const normSeed = seed.toLowerCase().trim();
+  const normSug = suggestion.toLowerCase().trim();
+
+  if (normSeed === normSug) return false;
+
+  // Split into tokens
+  const seedTokens = normSeed.split(/\s+/).filter(Boolean);
+  const sugTokens = normSug.split(/\s+/).filter(Boolean);
+
+  // If seed is a multi-word phrase, all tokens or majority must be present
+  if (seedTokens.length > 1) {
+    return seedTokens.every((token) => normSug.includes(token));
+  }
+
+  // If seed is a single word (e.g. "wavreel"), check for whole word match or clean prefix/suffix
+  const singleToken = seedTokens[0];
+  if (!singleToken) return false;
+
+  // 1. Exact whole word presence
+  const hasExactWord = sugTokens.some((t) => t === singleToken);
+  if (hasExactWord) return true;
+
+  // 2. Starts with the full seed token followed by a modifier (e.g. "wavreel alternative", "wavreel review", "wavreel app")
+  if (normSug.startsWith(singleToken + ' ') || normSug.endsWith(' ' + singleToken)) {
+    return true;
+  }
+
+  // Reject fuzzy word-morphing collisions (e.g. "wavrek", "wavre battle")
+  return false;
+}
+
+/**
  * Computes GSC Gap Opportunities:
- * Takes the top ranking GSC queries, runs genuine autocomplete expansion,
- * and categorizes every opportunity into actionable intelligence tiers.
+ * Takes top ranking GSC queries, runs genuine autocomplete expansion,
+ * cleans out unrelated phonetic/spelling collisions, and categorizes every
+ * opportunity into actionable intelligence tiers.
  */
 export async function computeGscGapOpportunities(
   gscQueries: GscQueryItem[],
@@ -55,6 +92,12 @@ export async function computeGscGapOpportunities(
 
       expandedItems.forEach((item) => {
         const normKw = item.keyword.toLowerCase().trim();
+
+        // Validate semantic relevance to avoid fuzzy word-morphing collisions like "wavrek" for "wavreel"
+        if (!isRelevantQueryExpansion(item.seedKeyword, item.keyword)) {
+          return;
+        }
+
         const existingGsc = gscQueryMap.get(normKw);
 
         if (existingGsc) {
@@ -96,7 +139,7 @@ export async function computeGscGapOpportunities(
           }
         } else {
           // Top autocomplete demand NOT currently ranking in GSC (YELLOW TIER)
-          if (item.relativeScore >= 65) {
+          if (item.relativeScore >= 60) {
             opportunities.push({
               query: item.keyword,
               sourceGscQuery: item.seedKeyword,
