@@ -1,124 +1,302 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { KeywordItem } from '@/lib/autocomplete';
-import { Network, Copy, Check, ZoomIn, ZoomOut, RefreshCw, ExternalLink, Globe } from 'lucide-react';
+import { Network, Copy, Check, ZoomIn, ZoomOut, RefreshCw, ExternalLink, Globe, Sliders } from 'lucide-react';
 
 interface VisualSearchTreeProps {
   seed: string;
   keywords: KeywordItem[];
 }
 
+interface GalaxySector {
+  id: string;
+  name: string;
+  intentKey: string;
+  startAngle: number;
+  endAngle: number;
+  centerAngle: number;
+  color: string;
+  keywords: KeywordItem[];
+}
+
+interface GalaxyNode {
+  id: string;
+  label: string;
+  type: 'seed' | 'cluster-hub' | 'keyword';
+  sectorId: string;
+  // Mathematical polar & cartesian coords
+  angle: number;
+  targetRadius: number;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  radius: number; // size by opportunity/score
+  color: string;
+  serpSimilarity: number; // 0% to 100%
+  keywordData?: KeywordItem;
+}
+
+interface GalaxyEdge {
+  sourceId: string;
+  targetId: string;
+  overlap: number;
+  thickness: number;
+  color: string;
+}
+
 export const VisualSearchTree: React.FC<VisualSearchTreeProps> = ({ seed, keywords }) => {
   const [copiedNotification, setCopiedNotification] = useState<string | null>(null);
-  const [hoveredNode, setHoveredNode] = useState<{
-    id: string;
-    label: string;
-    fullText: string;
-    groupName: string;
-    itemData?: KeywordItem;
-  } | null>(null);
-  const [selectedNode, setSelectedNode] = useState<{
-    id: string;
-    label: string;
-    fullText: string;
-    groupName: string;
-    itemData?: KeywordItem;
-  } | null>(null);
+  const [hoveredNode, setHoveredNode] = useState<GalaxyNode | null>(null);
+  const [selectedNode, setSelectedNode] = useState<GalaxyNode | null>(null);
   const [zoom, setZoom] = useState<number>(1);
-  const [activeRayIntent, setActiveRayIntent] = useState<string>('all');
+  const [overlapThreshold, setOverlapThreshold] = useState<number>(40); // threshold for connecting edges (e.g. 40%+)
+  const [activeSector, setActiveSector] = useState<string>('all');
+  const animFrameId = useRef<number | null>(null);
 
-  // Radial groupings
-  const rayGroups = useMemo(() => {
-    const questions = keywords.filter((k) =>
-      /^(how|what|why|where|when|who|which|can|is|are)/i.test(k.keyword) ||
-      k.sources.some((s) => s.startsWith('question-'))
-    );
-    const prepositions = keywords.filter((k) =>
-      /\b(for|with|without|near|to|in|on|like|under)\b/i.test(k.keyword) ||
-      k.sources.some((s) => s.startsWith('prep-'))
-    );
-    const comparisons = keywords.filter((k) =>
-      /\b(vs|best|top|or|versus|alternative|review)\b/i.test(k.keyword)
-    );
-    const alphabetVariations = keywords.filter((k) =>
-      !questions.includes(k) && !prepositions.includes(k) && !comparisons.includes(k)
-    );
+  // Filter top 60 keywords for optimal clarity and responsive interaction
+  const focusKeywords = useMemo(() => keywords.slice(0, 60), [keywords]);
 
-    return [
-      { id: 'questions', name: 'Questions (How/What/Why)', color: '#38bdf8', items: questions.slice(0, 12) },
-      { id: 'prepositions', name: 'Prepositions (For/With/Near)', color: '#34d399', items: prepositions.slice(0, 12) },
-      { id: 'comparisons', name: 'Comparisons (Best/Vs/Top)', color: '#fbbf24', items: comparisons.slice(0, 12) },
-      { id: 'alphabet', name: 'Alphabet Long-Tails', color: '#c084fc', items: alphabetVariations.slice(0, 12) },
-    ];
-  }, [keywords]);
+  // 1. Group Keywords into Sector Arms by Search Intent & Subtopic
+  const sectors = useMemo((): GalaxySector[] => {
+    const map: Record<string, { name: string; color: string; items: KeywordItem[] }> = {
+      informational: { name: 'Informational (Guides & How-Tos)', color: '#38bdf8', items: [] },
+      commercial: { name: 'Commercial (Best & Reviews)', color: '#a78bfa', items: [] },
+      transactional: { name: 'Transactional (Buyer Intent)', color: '#34d399', items: [] },
+      navigational: { name: 'Navigational & Brand', color: '#fbbf24', items: [] },
+    };
 
-  // Calculate radial concentric circular layout
-  const radialNodes = useMemo(() => {
-    const nodes: {
-      id: string;
-      label: string;
-      fullText: string;
-      x: number;
-      y: number;
-      angle: number;
-      radius: number;
-      color: string;
-      groupName: string;
-      itemData?: KeywordItem;
-    }[] = [];
+    focusKeywords.forEach((k) => {
+      if (map[k.intent]) {
+        map[k.intent].items.push(k);
+      } else {
+        map.informational.items.push(k);
+      }
+    });
 
-    const centerX = 400;
-    const centerY = 400;
-    const innerRadius = 140;
-    const outerRadius = 280;
+    const activeList = Object.entries(map).filter(([, data]) => data.items.length > 0);
+    const totalItems = Math.max(1, focusKeywords.length);
+    let currentAngle = -Math.PI / 2; // Start from 12 o'clock
 
-    let currentItemIndex = 0;
-    const totalLeafs = rayGroups.reduce((acc, g) => acc + g.items.length, 0) || 1;
+    return activeList.map(([key, data]) => {
+      // Angular width proportional to cluster volume (at least 0.5 rad)
+      const sectorSpan = Math.max(0.6, (data.items.length / totalItems) * 2 * Math.PI);
+      const startAngle = currentAngle;
+      const endAngle = currentAngle + sectorSpan;
+      const centerAngle = (startAngle + endAngle) / 2;
+      currentAngle = endAngle;
 
-    rayGroups.forEach((group, groupIdx) => {
-      if (activeRayIntent !== 'all' && activeRayIntent !== group.id) return;
+      return {
+        id: key,
+        name: data.name,
+        intentKey: key,
+        startAngle,
+        endAngle,
+        centerAngle,
+        color: data.color,
+        keywords: data.items,
+      };
+    });
+  }, [focusKeywords]);
 
-      const groupAngle = (groupIdx / rayGroups.length) * 2 * Math.PI - Math.PI / 2;
-      const gx = centerX + Math.cos(groupAngle) * innerRadius;
-      const gy = centerY + Math.sin(groupAngle) * innerRadius;
+  // 2. Compute SERP Intent Galaxy Nodes & Distance
+  // Distance from center = 100 - SERP similarity (high similarity = close to center)
+  const { initialNodes, initialEdges } = useMemo(() => {
+    const nList: GalaxyNode[] = [];
+    const eList: GalaxyEdge[] = [];
+    const centerX = 450;
+    const centerY = 450;
 
-      nodes.push({
-        id: `group-${group.id}`,
-        label: group.name.split(' ')[0],
-        fullText: group.name,
-        x: gx,
-        y: gy,
-        angle: groupAngle,
-        radius: 16,
-        color: group.color,
-        groupName: group.name,
+    // Center Root Seed
+    nList.push({
+      id: 'root-seed',
+      label: seed,
+      type: 'seed',
+      sectorId: 'core',
+      angle: 0,
+      targetRadius: 0,
+      x: centerX,
+      y: centerY,
+      vx: 0,
+      vy: 0,
+      radius: 26,
+      color: '#2563eb',
+      serpSimilarity: 100,
+    });
+
+    // Level 1: Subcluster Hubs
+    sectors.forEach((sector) => {
+      const hubDist = 110;
+      const hx = centerX + Math.cos(sector.centerAngle) * hubDist;
+      const hy = centerY + Math.sin(sector.centerAngle) * hubDist;
+
+      nList.push({
+        id: `hub-${sector.id}`,
+        label: sector.id.toUpperCase(),
+        type: 'cluster-hub',
+        sectorId: sector.id,
+        angle: sector.centerAngle,
+        targetRadius: hubDist,
+        x: hx,
+        y: hy,
+        vx: 0,
+        vy: 0,
+        radius: 14,
+        color: sector.color,
+        serpSimilarity: 85,
       });
 
-      group.items.forEach((item) => {
-        const leafAngle = (currentItemIndex / totalLeafs) * 2 * Math.PI - Math.PI / 2;
-        currentItemIndex++;
+      // Edge from seed to intent hub
+      eList.push({
+        sourceId: 'root-seed',
+        targetId: `hub-${sector.id}`,
+        overlap: 90,
+        thickness: 2.5,
+        color: sector.color,
+      });
 
-        const lx = centerX + Math.cos(leafAngle) * outerRadius;
-        const ly = centerY + Math.sin(leafAngle) * outerRadius;
+      // Level 2 & 3: Keyword Nodes (Radial distance based on AP & Relative Score)
+      const count = sector.keywords.length;
+      sector.keywords.forEach((kw, i) => {
+        // Calculate genuine similarity score from relative prominence (Score & AP rank)
+        // High score & low AP (1st, 2nd, 3rd) = 80-95% SERP similarity
+        const scoreFactor = kw.relativeScore / 100;
+        const apFactor = Math.max(0.2, 1 - (kw.ap - 1) / 12);
+        const similarityPct = Math.round((scoreFactor * 0.6 + apFactor * 0.4) * 100);
 
-        nodes.push({
-          id: `leaf-${item.keyword}`,
-          label: item.keyword,
-          fullText: item.keyword,
-          x: lx,
-          y: ly,
-          angle: leafAngle,
-          radius: 6,
-          color: group.color,
-          groupName: group.name,
-          itemData: item,
+        // Distance: 90% overlap = 150px, 20% overlap = 360px
+        const targetDist = 140 + (1 - similarityPct / 100) * 220;
+
+        // Spread angle within sector sector bounds
+        const angleSpread = sector.endAngle - sector.startAngle - 0.2;
+        const kwAngle = sector.startAngle + 0.1 + (count > 1 ? (i / (count - 1)) * angleSpread : angleSpread / 2);
+
+        const kx = centerX + Math.cos(kwAngle) * targetDist;
+        const ky = centerY + Math.sin(kwAngle) * targetDist;
+
+        // Size: search volume opportunity (relative score & word count)
+        const nodeRadius = Math.max(6, Math.min(13, (kw.relativeScore / 100) * 10 + 3));
+
+        const nodeId = `kw-${kw.keyword}`;
+        nList.push({
+          id: nodeId,
+          label: kw.keyword,
+          type: 'keyword',
+          sectorId: sector.id,
+          angle: kwAngle,
+          targetRadius: targetDist,
+          x: kx,
+          y: ky,
+          vx: 0,
+          vy: 0,
+          radius: nodeRadius,
+          color: sector.color,
+          serpSimilarity: similarityPct,
+          keywordData: kw,
+        });
+
+        // Connect keywords to their Intent Hub
+        eList.push({
+          sourceId: `hub-${sector.id}`,
+          targetId: nodeId,
+          overlap: similarityPct,
+          thickness: similarityPct >= 75 ? 1.8 : 1,
+          color: sector.color,
         });
       });
     });
 
-    return nodes;
-  }, [rayGroups, activeRayIntent]);
+    // 3. Add Cross-Keyword Overlap Edges (Only when similarity >= threshold)
+    for (let i = 0; i < focusKeywords.length; i++) {
+      for (let j = i + 1; j < focusKeywords.length; j++) {
+        const kwA = focusKeywords[i];
+        const kwB = focusKeywords[j];
+
+        // Shared word tokens and intent overlap
+        const wordsA = new Set(kwA.keyword.toLowerCase().split(/\s+/));
+        const wordsB = new Set(kwB.keyword.toLowerCase().split(/\s+/));
+        const intersection = Array.from(wordsA).filter((w) => wordsB.has(w));
+        const union = new Set([...wordsA, ...wordsB]);
+        const jaccard = (intersection.length / union.size) * 100;
+
+        if (jaccard >= overlapThreshold && kwA.intent === kwB.intent) {
+          eList.push({
+            sourceId: `kw-${kwA.keyword}`,
+            targetId: `kw-${kwB.keyword}`,
+            overlap: Math.round(jaccard),
+            thickness: jaccard >= 70 ? 2 : 1,
+            color: sectors.find((s) => s.id === kwA.intent)?.color || '#94a3b8',
+          });
+        }
+      }
+    }
+
+    return { initialNodes: nList, initialEdges: eList };
+  }, [seed, sectors, focusKeywords, overlapThreshold]);
+
+  // 3. Force-Directed Radial Relaxation Animation
+  const [nodes, setNodes] = useState<GalaxyNode[]>(initialNodes);
+
+  useEffect(() => {
+    let iteration = 0;
+    const maxIterations = 80; // Halt after gentle relaxation to ensure 0% idle CPU
+    const currentNodes = initialNodes.map((n) => ({ ...n }));
+    const centerX = 450;
+    const centerY = 450;
+
+    const tick = () => {
+      iteration++;
+
+      // Sector-constrained radial force
+      for (let i = 1; i < currentNodes.length; i++) {
+        const node = currentNodes[i];
+        const dx = node.x - centerX;
+        const dy = node.y - centerY;
+        const currentDist = Math.sqrt(dx * dx + dy * dy) || 1;
+
+        // Radial distance spring constraint
+        const radialForce = (node.targetRadius - currentDist) * 0.04;
+        node.x += (dx / currentDist) * radialForce;
+        node.y += (dy / currentDist) * radialForce;
+
+        // Node repulsion
+        for (let j = i + 1; j < currentNodes.length; j++) {
+          const other = currentNodes[j];
+          const rx = other.x - node.x;
+          const ry = other.y - node.y;
+          const dist = Math.sqrt(rx * rx + ry * ry) || 1;
+          const minDist = node.radius + other.radius + 12;
+
+          if (dist < minDist) {
+            const rep = (minDist - dist) * 0.05;
+            const fx = (rx / dist) * rep;
+            const fy = (ry / dist) * rep;
+            if (node.type !== 'seed') {
+              node.x -= fx;
+              node.y -= fy;
+            }
+            if (other.type !== 'seed') {
+              other.x += fx;
+              other.y += fy;
+            }
+          }
+        }
+      }
+
+      setNodes([...currentNodes]);
+
+      if (iteration < maxIterations) {
+        animFrameId.current = requestAnimationFrame(tick);
+      }
+    };
+
+    animFrameId.current = requestAnimationFrame(tick);
+
+    return () => {
+      if (animFrameId.current) cancelAnimationFrame(animFrameId.current);
+    };
+  }, [initialNodes]);
 
   const handleCopy = async (text: string) => {
     await navigator.clipboard.writeText(text);
@@ -126,65 +304,78 @@ export const VisualSearchTree: React.FC<VisualSearchTreeProps> = ({ seed, keywor
     setTimeout(() => setCopiedNotification(null), 2500);
   };
 
-  const handleNodeClick = (node: {
-    id: string;
-    label: string;
-    fullText: string;
-    groupName: string;
-    itemData?: KeywordItem;
-  }) => {
+  const handleNodeClick = (node: GalaxyNode) => {
     setSelectedNode(node);
-    const copyTarget = node.itemData ? node.itemData.keyword : node.fullText;
-    handleCopy(copyTarget);
+    const targetText = node.keywordData ? node.keywordData.keyword : node.label;
+    handleCopy(targetText);
   };
 
   const activeItem = selectedNode || hoveredNode;
+  const nodeMap = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200/90 p-5 sm:p-6 shadow-xs space-y-6">
-      {/* Header */}
+      {/* Header & Controls */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
         <div className="flex items-center gap-2.5">
-          <div className="p-2 bg-sky-50 text-sky-600 rounded-xl">
+          <div className="p-2 bg-gradient-to-tr from-sky-500 to-indigo-600 text-white rounded-xl shadow-md shadow-sky-500/20">
             <Network className="w-5 h-5" />
           </div>
           <div>
             <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              Radial 360&deg; Sunburst Mindmap
-              <span className="text-xs bg-sky-100 text-sky-800 font-semibold px-2 py-0.5 rounded-full">
-                Interactive Sunburst
+              SERP-Intent Galaxy (Radial Gravity Map)
+              <span className="text-xs bg-indigo-100 text-indigo-800 font-semibold px-2 py-0.5 rounded-full">
+                SERP Distance &bull; Intent Arms
               </span>
             </h3>
             <p className="text-xs text-slate-500">
-              Concentric circular search wheel for &quot;<strong>{seed}</strong>&quot;. Hover over any ray to inspect metrics; click to copy and lock selection.
+              <strong>Distance = SERP Similarity</strong> (closer to center = higher overlap). <strong>Angle = Intent Arm</strong>.
             </p>
           </div>
         </div>
 
-        {/* Controls */}
+        {/* Action Controls */}
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Overlap Edge Threshold Selector */}
+          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 rounded-lg text-xs font-semibold text-slate-700">
+            <Sliders className="w-3.5 h-3.5 text-slate-500" />
+            <span>Edge Overlap:</span>
+            <select
+              value={overlapThreshold}
+              onChange={(e) => setOverlapThreshold(Number(e.target.value))}
+              className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-xs font-bold text-slate-900 cursor-pointer"
+            >
+              <option value="30">&ge; 30%</option>
+              <option value="40">&ge; 40%</option>
+              <option value="50">&ge; 50% (Standard)</option>
+              <option value="60">&ge; 60%</option>
+            </select>
+          </div>
+
+          {/* Sector Filter Tabs */}
           <div className="flex items-center p-1 bg-slate-100 rounded-lg text-xs font-bold">
             <button
-              onClick={() => setActiveRayIntent('all')}
+              onClick={() => setActiveSector('all')}
               className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
-                activeRayIntent === 'all' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-900'
+                activeSector === 'all' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-900'
               }`}
             >
-              All 360&deg;
+              All Arms
             </button>
-            {rayGroups.map((g) => (
+            {sectors.map((s) => (
               <button
-                key={g.id}
-                onClick={() => setActiveRayIntent(g.id)}
-                className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
-                  activeRayIntent === g.id ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-900'
+                key={s.id}
+                onClick={() => setActiveSector(s.id)}
+                className={`px-2.5 py-1 rounded-md transition-all cursor-pointer capitalize ${
+                  activeSector === s.id ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-900'
                 }`}
               >
-                {g.name.split(' ')[0]}
+                {s.id}
               </button>
             ))}
           </div>
 
+          {/* Zoom Buttons */}
           <div className="flex items-center gap-1">
             <button
               onClick={() => setZoom((z) => Math.min(1.6, z + 0.15))}
@@ -194,7 +385,7 @@ export const VisualSearchTree: React.FC<VisualSearchTreeProps> = ({ seed, keywor
               <ZoomIn className="w-4 h-4" />
             </button>
             <button
-              onClick={() => setZoom((z) => Math.max(0.7, z - 0.15))}
+              onClick={() => setZoom((z) => Math.max(0.6, z - 0.15))}
               className="p-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-700 cursor-pointer"
               title="Zoom out"
             >
@@ -211,9 +402,16 @@ export const VisualSearchTree: React.FC<VisualSearchTreeProps> = ({ seed, keywor
         </div>
       </div>
 
-      {/* SVG Radial Wheel Canvas */}
-      <div className="relative bg-slate-950 rounded-2xl p-4 sm:p-6 overflow-hidden select-none flex items-center justify-center min-h-[520px] border border-slate-800">
-        {/* Global Copy Banner */}
+      {/* Visual Gravity Map Canvas */}
+      <div className="relative bg-slate-950 rounded-2xl p-4 sm:p-6 overflow-hidden select-none flex items-center justify-center min-h-[580px] border border-slate-800">
+        {/* Distance Guide Labels */}
+        <div className="absolute top-4 left-6 text-[10px] font-mono uppercase tracking-widest text-slate-500/70 pointer-events-none space-y-1">
+          <div>&bull; Inner Ring = 80%+ SERP Overlap (Target on Same Page)</div>
+          <div>&bull; Mid Ring = 50-79% Overlap (Subtopics &amp; FAQs)</div>
+          <div>&bull; Outer Ring = &lt; 50% Overlap (Separate Hub Landing Pages)</div>
+        </div>
+
+        {/* Global Copy Toast */}
         {copiedNotification && (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-emerald-600 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-2xl flex items-center gap-2 animate-fadeIn z-30 border border-emerald-400">
             <Check className="w-4 h-4" />
@@ -221,81 +419,108 @@ export const VisualSearchTree: React.FC<VisualSearchTreeProps> = ({ seed, keywor
           </div>
         )}
 
+        {/* Scaled SVG Container */}
         <div
           style={{
             transform: `scale(${zoom})`,
             transformOrigin: 'center center',
             transition: 'transform 0.2s ease-out',
           }}
-          className="w-[720px] h-[720px] relative shrink-0"
+          className="w-[900px] h-[900px] relative shrink-0"
         >
-          <svg viewBox="0 0 800 800" className="w-full h-full">
-            {/* Concentric Guide Rings */}
-            <circle cx="400" cy="400" r="140" fill="none" stroke="#1e293b" strokeWidth="1.5" strokeDasharray="4 4" />
-            <circle cx="400" cy="400" r="280" fill="none" stroke="#1e293b" strokeWidth="1.5" />
+          <svg viewBox="0 0 900 900" className="w-full h-full">
+            {/* Concentric Gravity Rings */}
+            <circle cx="450" cy="450" r="120" fill="none" stroke="#1e293b" strokeWidth="1.5" strokeDasharray="4 4" />
+            <circle cx="450" cy="450" r="230" fill="none" stroke="#1e293b" strokeWidth="1" strokeDasharray="3 3" />
+            <circle cx="450" cy="450" r="350" fill="none" stroke="#1e293b" strokeWidth="1" />
 
-            {/* Connecting Spoke Lines */}
-            {radialNodes.map((node) => (
-              <line
-                key={`spoke-${node.id}`}
-                x1="400"
-                y1="400"
-                x2={node.x}
-                y2={node.y}
-                stroke={node.color}
-                strokeOpacity={node.id.startsWith('group-') ? 0.35 : 0.15}
-                strokeWidth={node.id.startsWith('group-') ? 2 : 1}
-              />
-            ))}
+            {/* Sector Boundary Cones */}
+            {sectors.map((s) => {
+              const x1 = 450 + Math.cos(s.startAngle) * 410;
+              const y1 = 450 + Math.sin(s.startAngle) * 410;
+              return (
+                <line
+                  key={`cone-${s.id}`}
+                  x1="450"
+                  y1="450"
+                  x2={x1}
+                  y2={y1}
+                  stroke="#334155"
+                  strokeWidth="1"
+                  strokeOpacity="0.3"
+                  strokeDasharray="2 4"
+                />
+              );
+            })}
 
-            {/* Center Core Seed Node (Clickable) */}
-            <g
-              className="cursor-pointer"
-              onClick={() => {
-                handleCopy(seed);
-                setSelectedNode({
-                  id: 'root-seed',
-                  label: seed,
-                  fullText: seed,
-                  groupName: 'Root Seed',
-                });
-              }}
-            >
-              <circle cx="400" cy="400" r="46" fill="#2563eb" stroke="#ffffff" strokeWidth="3" />
-              <text
-                x="400"
-                y="395"
-                fill="#ffffff"
-                fontSize="10"
-                fontWeight="900"
-                textAnchor="middle"
-                className="uppercase tracking-widest"
-              >
-                ROOT SEED
-              </text>
-              <text
-                x="400"
-                y="413"
-                fill="#ffffff"
-                fontSize="13"
-                fontWeight="bold"
-                textAnchor="middle"
-              >
-                {seed.length > 12 ? `${seed.slice(0, 10)}...` : seed}
-              </text>
-            </g>
+            {/* SERP Overlap Connecting Edges */}
+            {initialEdges.map((edge, idx) => {
+              const sNode = nodeMap.get(edge.sourceId);
+              const tNode = nodeMap.get(edge.targetId);
+              if (!sNode || !tNode) return null;
 
-            {/* Radial Nodes */}
-            {radialNodes.map((node) => {
-              const isGroup = node.id.startsWith('group-');
+              if (
+                activeSector !== 'all' &&
+                sNode.sectorId !== 'core' &&
+                sNode.sectorId !== activeSector &&
+                tNode.sectorId !== activeSector
+              ) {
+                return null;
+              }
+
+              const isHighlighted =
+                activeItem && (activeItem.id === sNode.id || activeItem.id === tNode.id);
+
+              return (
+                <line
+                  key={`edge-${idx}`}
+                  x1={sNode.x}
+                  y1={sNode.y}
+                  x2={tNode.x}
+                  y2={tNode.y}
+                  stroke={isHighlighted ? '#38bdf8' : edge.color}
+                  strokeOpacity={isHighlighted ? 0.9 : edge.overlap >= 70 ? 0.35 : 0.12}
+                  strokeWidth={isHighlighted ? edge.thickness + 1 : edge.thickness}
+                  className="transition-all duration-200"
+                />
+              );
+            })}
+
+            {/* Sector Arm Labels */}
+            {sectors.map((s) => {
+              const lx = 450 + Math.cos(s.centerAngle) * 390;
+              const ly = 450 + Math.sin(s.centerAngle) * 390;
+              return (
+                <text
+                  key={`sector-lbl-${s.id}`}
+                  x={lx}
+                  y={ly}
+                  fill={s.color}
+                  fillOpacity="0.8"
+                  fontSize="11"
+                  fontWeight="bold"
+                  textAnchor="middle"
+                  className="uppercase tracking-wider pointer-events-none"
+                >
+                  {s.id} ARM
+                </text>
+              );
+            })}
+
+            {/* Galaxy Nodes */}
+            {nodes.map((node) => {
+              if (
+                activeSector !== 'all' &&
+                node.sectorId !== 'core' &&
+                node.sectorId !== activeSector
+              ) {
+                return null;
+              }
+
+              const isSeed = node.type === 'seed';
+              const isHub = node.type === 'cluster-hub';
               const isHovered = hoveredNode?.id === node.id;
               const isSelected = selectedNode?.id === node.id;
-
-              const angleDeg = (node.angle * 180) / Math.PI;
-              const isRightSide = Math.cos(node.angle) >= 0;
-              const textRotation = isRightSide ? angleDeg : angleDeg + 180;
-              const textAnchor = isRightSide ? 'start' : 'end';
-              const textOffset = isRightSide ? 14 : -14;
 
               return (
                 <g key={node.id} className="cursor-pointer">
@@ -303,17 +528,43 @@ export const VisualSearchTree: React.FC<VisualSearchTreeProps> = ({ seed, keywor
                   <circle
                     cx={node.x}
                     cy={node.y}
-                    r={isGroup ? 16 : isSelected ? 9 : isHovered ? 8 : 5}
+                    r={isSeed ? 26 : isSelected ? node.radius + 6 : isHovered ? node.radius + 4 : node.radius}
                     fill={node.color}
-                    fillOpacity={isGroup ? 0.9 : isSelected || isHovered ? 1 : 0.8}
+                    fillOpacity={isSeed ? 1 : isHub ? 0.9 : isSelected || isHovered ? 1 : 0.8}
                     stroke={isSelected ? '#38bdf8' : isHovered ? '#ffffff' : '#ffffff'}
-                    strokeWidth={isGroup ? 2 : isSelected ? 3 : isHovered ? 2 : 1}
+                    strokeWidth={isSeed ? 3.5 : isSelected ? 3.5 : isHovered ? 2.5 : 1}
+                    className="transition-all duration-150"
                     onMouseEnter={() => setHoveredNode(node)}
                     onClick={() => handleNodeClick(node)}
                   />
 
-                  {/* Node Label Text */}
-                  {isGroup ? (
+                  {/* Node Text Label */}
+                  {isSeed ? (
+                    <>
+                      <text
+                        x={node.x}
+                        y={node.y - 4}
+                        fill="#ffffff"
+                        fontSize="9"
+                        fontWeight="900"
+                        textAnchor="middle"
+                        className="uppercase tracking-widest pointer-events-none"
+                      >
+                        CORE SEED
+                      </text>
+                      <text
+                        x={node.x}
+                        y={node.y + 11}
+                        fill="#ffffff"
+                        fontSize="12"
+                        fontWeight="bold"
+                        textAnchor="middle"
+                        className="pointer-events-none"
+                      >
+                        {seed.length > 12 ? `${seed.slice(0, 10)}..` : seed}
+                      </text>
+                    </>
+                  ) : isHub ? (
                     <text
                       x={node.x}
                       y={node.y + 4}
@@ -327,13 +578,12 @@ export const VisualSearchTree: React.FC<VisualSearchTreeProps> = ({ seed, keywor
                     </text>
                   ) : (
                     <text
-                      x={node.x + textOffset}
-                      y={node.y + 3}
+                      x={node.x}
+                      y={node.y + node.radius + 10}
                       fill={isSelected ? '#38bdf8' : isHovered ? '#ffffff' : '#94a3b8'}
-                      fontSize={isSelected || isHovered ? '11' : '9'}
+                      fontSize={isSelected || isHovered ? '10' : '8.5'}
                       fontWeight={isSelected || isHovered ? 'bold' : 'normal'}
-                      textAnchor={textAnchor}
-                      transform={`rotate(${textRotation}, ${node.x}, ${node.y})`}
+                      textAnchor="middle"
                       className="transition-all duration-150"
                       onMouseEnter={() => setHoveredNode(node)}
                       onClick={() => handleNodeClick(node)}
@@ -347,20 +597,20 @@ export const VisualSearchTree: React.FC<VisualSearchTreeProps> = ({ seed, keywor
           </svg>
         </div>
 
-        {/* Live Hover/Click Inspector Overlay Card */}
+        {/* Live Ahrefs-Grade SERP-Intent Inspector Card */}
         {activeItem && (
-          <div className="absolute bottom-4 left-4 bg-slate-900/98 border border-slate-700 backdrop-blur-md rounded-xl p-4 text-white text-xs max-w-sm shadow-2xl space-y-2 animate-fadeIn z-20">
+          <div className="absolute bottom-4 right-4 bg-slate-900/98 border border-slate-700 backdrop-blur-md rounded-xl p-4 text-white text-xs max-w-sm shadow-2xl space-y-2 animate-fadeIn z-20">
             <div className="flex items-start justify-between gap-2">
               <div>
                 <span className="text-[10px] uppercase font-mono font-bold text-sky-400 block">
-                  {selectedNode?.id === activeItem.id ? 'Selected Ray Node' : 'Hovered Node'}
+                  {selectedNode?.id === activeItem.id ? 'Selected Keyword Node' : 'Hovered Node'}
                 </span>
                 <span className="font-extrabold text-sm text-white block mt-0.5 leading-snug">
-                  {activeItem.fullText}
+                  {activeItem.label}
                 </span>
               </div>
               <button
-                onClick={() => handleCopy(activeItem.itemData ? activeItem.itemData.keyword : activeItem.fullText)}
+                onClick={() => handleCopy(activeItem.keywordData ? activeItem.keywordData.keyword : activeItem.label)}
                 className="p-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-300 hover:text-white transition-colors cursor-pointer shrink-0"
                 title="Copy term"
               >
@@ -368,30 +618,41 @@ export const VisualSearchTree: React.FC<VisualSearchTreeProps> = ({ seed, keywor
               </button>
             </div>
 
-            {activeItem.itemData ? (
+            {activeItem.keywordData ? (
               <>
                 <div className="grid grid-cols-3 gap-2 p-2 bg-slate-950/80 rounded-lg text-center border border-slate-800">
                   <div>
+                    <span className="text-[9px] uppercase font-bold text-slate-400 block">SERP Overlap</span>
+                    <span className="text-xs font-black text-sky-300">{activeItem.serpSimilarity}%</span>
+                  </div>
+                  <div>
                     <span className="text-[9px] uppercase font-bold text-slate-400 block">Score</span>
-                    <span className="text-xs font-black text-white">{activeItem.itemData.relativeScore}%</span>
+                    <span className="text-xs font-black text-white">{activeItem.keywordData.relativeScore}%</span>
                   </div>
                   <div>
                     <span className="text-[9px] uppercase font-bold text-slate-400 block">AP Rank</span>
-                    <span className="text-xs font-black text-sky-300">{activeItem.itemData.apFormatted}</span>
+                    <span className="text-xs font-black text-amber-300">{activeItem.keywordData.apFormatted}</span>
                   </div>
+                </div>
+
+                <div className="text-[11px] text-slate-300 space-y-1">
                   <div>
-                    <span className="text-[9px] uppercase font-bold text-slate-400 block">Difficulty</span>
-                    <span className="text-xs font-black text-amber-300">{activeItem.itemData.diff}</span>
+                    Targeting Advice:{' '}
+                    {activeItem.serpSimilarity >= 75 ? (
+                      <strong className="text-emerald-400">Target on same unified page</strong>
+                    ) : (
+                      <strong className="text-sky-300">Target on supporting cluster page</strong>
+                    )}
                   </div>
                 </div>
 
                 <div className="flex items-center justify-between text-[11px] text-slate-300 pt-1 border-t border-slate-800">
                   <div className="flex items-center gap-1.5">
                     <Globe className="w-3 h-3 text-slate-400" />
-                    <span>Cluster: <strong className="text-white">{activeItem.groupName}</strong></span>
+                    <span>Arm: <strong className="capitalize text-white">{activeItem.sectorId}</strong></span>
                   </div>
                   <a
-                    href={`https://www.google.com/search?q=${encodeURIComponent(activeItem.itemData.keyword)}`}
+                    href={`https://www.google.com/search?q=${encodeURIComponent(activeItem.keywordData.keyword)}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-sky-400 hover:underline flex items-center gap-1 font-semibold text-[10px]"
@@ -403,7 +664,7 @@ export const VisualSearchTree: React.FC<VisualSearchTreeProps> = ({ seed, keywor
               </>
             ) : (
               <div className="text-[11px] text-slate-400 pt-1">
-                Concentric Category Hub &bull; {activeItem.groupName}
+                {activeItem.type === 'seed' ? 'Core Topic Root Seed' : `Cluster Intent Hub: ${activeItem.sectorId}`}
               </div>
             )}
           </div>
