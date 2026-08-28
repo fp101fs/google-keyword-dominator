@@ -33,6 +33,7 @@ import {
   ScatterChart,
   LayoutGrid,
   Share2,
+  Target,
 } from 'lucide-react';
 
 export default function Home() {
@@ -187,16 +188,25 @@ export default function Home() {
             </div>
             <div>
               <span className="font-extrabold text-lg text-slate-900 tracking-tight flex items-center gap-1.5">
-                Keyword Dominator <span className="text-xs bg-blue-100 text-blue-800 font-semibold px-2 py-0.5 rounded-full">Ahrefs Pro Edition</span>
+                Keyword Dominator <span className="text-xs bg-blue-100 text-blue-800 font-semibold px-2 py-0.5 rounded-full">Ahrefs Pro Suite</span>
               </span>
               <p className="text-[11px] text-slate-500 font-medium">Multi-Platform Autocomplete &amp; Competitor Gap Intelligence</p>
             </div>
           </div>
 
-          <div className="hidden sm:flex items-center gap-3 text-xs font-semibold">
-            <span className="inline-flex items-center gap-1.5 text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-200/60">
+          <div className="flex items-center gap-2.5">
+            {/* Global Navbar Ahrefs Content Gap Button */}
+            <button
+              onClick={() => setIsGapOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl shadow-xs transition-all cursor-pointer"
+            >
+              <Target className="w-4 h-4 text-rose-600" />
+              <span>🎯 Ahrefs Content Gap</span>
+            </button>
+
+            <span className="hidden md:inline-flex items-center gap-1.5 text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-200/60 text-xs font-semibold">
               <ShieldCheck className="w-4 h-4 text-emerald-600" />
-              100% Real Autocomplete &amp; SERP Data
+              100% Real Autocomplete Data
             </span>
           </div>
         </div>
@@ -312,7 +322,7 @@ export default function Home() {
                     <span>Treemap</span>
                   </button>
 
-                  {/* 4. Canvas Network Graph (Hardware-Accelerated) */}
+                  {/* 4. Canvas Network Graph */}
                   <button
                     onClick={() => setActiveView('network')}
                     className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
@@ -364,7 +374,7 @@ export default function Home() {
                     <span>Hierarchy Tree</span>
                   </button>
 
-                  {/* 8. Radial Graph */}
+                  {/* 8. Radial Sunburst Graph */}
                   <button
                     onClick={() => setActiveView('tree')}
                     className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
@@ -378,8 +388,13 @@ export default function Home() {
                   </button>
                 </div>
 
-                <div className="text-xs text-slate-500 font-medium hidden xl:block">
-                  Showing results for: <strong className="text-slate-800">{activeParams.query}</strong>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setIsGapOpen(true)}
+                    className="text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-1.5 rounded-lg transition-all cursor-pointer"
+                  >
+                    🎯 Content Gap
+                  </button>
                 </div>
               </div>
 
