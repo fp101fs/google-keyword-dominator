@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Sparkles,
@@ -10,13 +10,17 @@ import {
   Download,
   ShieldCheck,
   BookmarkCheck,
-  FileText,
   Flame,
   CheckCircle2,
   RotateCcw,
+  GitBranch,
+  Send,
+  ExternalLink,
+  FolderCheck,
 } from 'lucide-react';
 import { FactoryGenerationResult, FACTORY_STEPS } from '@/lib/article-factory';
 import { saveSprintItem } from '@/lib/action-cart';
+import { GithubRepo, RepoConventionCheck } from '@/lib/github';
 
 interface ArticleWriterModalProps {
   seed: string;
@@ -40,6 +44,71 @@ export const ArticleWriterModal: React.FC<ArticleWriterModalProps> = ({
   const [copied, setCopied] = useState(false);
   const [savedToSprint, setSavedToSprint] = useState(false);
 
+  // GitHub Publishing State
+  const [isGithubConnected, setIsGithubConnected] = useState(false);
+  const [repos, setRepos] = useState<GithubRepo[]>([]);
+  const [selectedRepo, setSelectedRepo] = useState<string>('');
+  const [targetFolder, setTargetFolder] = useState<string>('content/posts');
+  const [conventionCheck, setConventionCheck] = useState<RepoConventionCheck | null>(null);
+  const [isCheckingRepo, setIsCheckingRepo] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [publishedUrl, setPublishedUrl] = useState<{ fileUrl: string; commitUrl: string } | null>(null);
+
+  // Fetch GitHub repos on mount
+  useEffect(() => {
+    if (!isOpen) return;
+
+    async function loadGithub() {
+      try {
+        const res = await fetch('/api/github/repos');
+        const data = await res.json();
+        if (data.authenticated && data.repos?.length > 0) {
+          setIsGithubConnected(true);
+          setRepos(data.repos);
+          setSelectedRepo(data.repos[0].full_name);
+        }
+      } catch {
+        // Not connected
+      }
+    }
+
+    loadGithub();
+  }, [isOpen]);
+
+  // Auto-scan repo conventions when repo changes
+  useEffect(() => {
+    if (!selectedRepo) return;
+
+    let isMounted = true;
+    async function scanRepo() {
+      setIsCheckingRepo(true);
+      try {
+        const res = await fetch('/api/github/check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ repo: selectedRepo, folder: targetFolder }),
+        });
+        const data = await res.json();
+        if (isMounted && data.success && data.check) {
+          setConventionCheck(data.check);
+          if (data.check.suggestedFolder && data.check.suggestedFolder !== targetFolder) {
+            setTargetFolder(data.check.suggestedFolder);
+          }
+        }
+      } catch {
+        // Non-blocking
+      } finally {
+        if (isMounted) setIsCheckingRepo(false);
+      }
+    }
+
+    scanRepo();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedRepo, targetFolder]);
+
   if (!isOpen) return null;
 
   const handleStartGeneration = async () => {
@@ -47,7 +116,6 @@ export const ArticleWriterModal: React.FC<ArticleWriterModalProps> = ({
     setError(null);
     setCurrentStepIndex(0);
 
-    // Simulate progress animation across pipeline steps
     const stepInterval = setInterval(() => {
       setCurrentStepIndex((prev) => (prev < FACTORY_STEPS.length - 1 ? prev + 1 : prev));
     }, 4500);
@@ -76,6 +144,37 @@ export const ArticleWriterModal: React.FC<ArticleWriterModalProps> = ({
     } finally {
       clearInterval(stepInterval);
       setIsGenerating(false);
+    }
+  };
+
+  const handlePublishToGithub = async () => {
+    if (!result || !selectedRepo) return;
+
+    setIsPublishing(true);
+    try {
+      const filePath = `${targetFolder.replace(/\/$/, '')}/${result.slug}.md`;
+      const res = await fetch('/api/github/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          repo: selectedRepo,
+          path: filePath,
+          content: result.content,
+          message: `feat(blog): publish "${result.title}"`,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to publish file to GitHub');
+      }
+
+      setPublishedUrl({ fileUrl: data.fileUrl, commitUrl: data.commitUrl });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Publish failed';
+      alert(msg);
+    } finally {
+      setIsPublishing(false);
     }
   };
 
@@ -246,6 +345,113 @@ export const ArticleWriterModal: React.FC<ArticleWriterModalProps> = ({
                 </div>
               </div>
 
+              {/* GitHub 1-Click Repo Selector & Publisher (#Ported) */}
+              <div className="p-4 bg-slate-100/70 border border-slate-200 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <GitBranch className="w-4 h-4 text-slate-800" />
+                    <span className="font-extrabold text-slate-900 text-xs">
+                      1-Click GitHub Markdown Blog Publisher
+                    </span>
+                  </div>
+
+                  {!isGithubConnected && (
+                    <a
+                      href="/api/github/auth"
+                      className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-[11px] font-bold flex items-center gap-1.5 transition-all shadow-2xs"
+                    >
+                      <GitBranch className="w-3.5 h-3.5" />
+                      <span>Connect GitHub</span>
+                    </a>
+                  )}
+                </div>
+
+                {isGithubConnected && (
+                  <div className="space-y-3 pt-1">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">Target Repository</label>
+                        <select
+                          value={selectedRepo}
+                          onChange={(e) => setSelectedRepo(e.target.value)}
+                          className="w-full p-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 cursor-pointer"
+                        >
+                          {repos.map((r) => (
+                            <option key={r.full_name} value={r.full_name}>
+                              {r.full_name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center justify-between">
+                          <span>Target Blog Folder</span>
+                          {isCheckingRepo && <Loader2 className="w-3 h-3 animate-spin text-blue-600" />}
+                        </label>
+                        <input
+                          type="text"
+                          value={targetFolder}
+                          onChange={(e) => setTargetFolder(e.target.value)}
+                          placeholder="content/posts"
+                          className="w-full p-2 bg-white border border-slate-300 rounded-xl text-xs font-mono font-semibold text-slate-800"
+                        />
+                      </div>
+                    </div>
+
+                    {conventionCheck && (
+                      <div className="p-2.5 bg-emerald-50/80 border border-emerald-200 rounded-xl flex items-center justify-between text-[11px] text-emerald-900">
+                        <div className="flex items-center gap-1.5">
+                          <FolderCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span>
+                            {conventionCheck.platform && `[${conventionCheck.platform}] `}
+                            Folder verified ({conventionCheck.articleCount} existing posts found)
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {publishedUrl ? (
+                      <div className="p-3 bg-emerald-100 border border-emerald-300 rounded-xl space-y-1 text-[11px] text-emerald-900">
+                        <div className="font-bold flex items-center gap-1">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-700" />
+                          <span>Published successfully to GitHub!</span>
+                        </div>
+                        <div className="flex items-center gap-3 pt-1">
+                          <a
+                            href={publishedUrl.fileUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-700 underline font-semibold flex items-center gap-1"
+                          >
+                            <span>View File</span>
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                          <a
+                            href={publishedUrl.commitUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-slate-600 underline flex items-center gap-1"
+                          >
+                            <span>View Commit</span>
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={handlePublishToGithub}
+                        disabled={isPublishing}
+                        className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                      >
+                        {isPublishing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                        <span>{isPublishing ? 'Committing to GitHub...' : `Publish to ${selectedRepo}/${targetFolder}/${result.slug}.md`}</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {/* Title & Slug Box */}
               <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-2xs space-y-1">
                 <span className="text-[10px] uppercase font-bold text-slate-400 block">Article Title</span>
@@ -258,7 +464,7 @@ export const ArticleWriterModal: React.FC<ArticleWriterModalProps> = ({
                 <span className="font-extrabold text-slate-700 block uppercase tracking-wider text-[10px]">
                   Generated Article Content (Markdown)
                 </span>
-                <div className="p-4 bg-white rounded-2xl border border-slate-200 font-mono text-slate-800 whitespace-pre-wrap leading-relaxed max-h-96 overflow-y-auto text-[11px]">
+                <div className="p-4 bg-white rounded-2xl border border-slate-200 font-mono text-slate-800 whitespace-pre-wrap leading-relaxed max-h-72 overflow-y-auto text-[11px]">
                   {result.content}
                 </div>
               </div>
@@ -272,6 +478,7 @@ export const ArticleWriterModal: React.FC<ArticleWriterModalProps> = ({
             <button
               onClick={() => {
                 setResult(null);
+                setPublishedUrl(null);
                 handleStartGeneration();
               }}
               className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
@@ -287,7 +494,7 @@ export const ArticleWriterModal: React.FC<ArticleWriterModalProps> = ({
                 title="Pin article to Action Sprint"
               >
                 {savedToSprint ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <BookmarkCheck className="w-3.5 h-3.5 text-blue-600" />}
-                <span>{savedToSprint ? 'Saved to Sprint' : 'Save to Sprint'}</span>
+                <span>{savedToSprint ? 'Saved' : 'Save'}</span>
               </button>
 
               <button
@@ -295,14 +502,14 @@ export const ArticleWriterModal: React.FC<ArticleWriterModalProps> = ({
                 className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
               >
                 <Download className="w-3.5 h-3.5" />
-                <span>Download .md</span>
+                <span>.md</span>
               </button>
 
               <button
                 onClick={handleCopy}
                 className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md cursor-pointer transition-colors"
               >
-                {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                 <span>{copied ? 'Copied' : 'Copy Article'}</span>
               </button>
             </div>
