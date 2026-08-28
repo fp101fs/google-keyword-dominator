@@ -12,6 +12,7 @@
 import { GscQueryItem } from '../gsc/types';
 import { getExpandedKeywords, normalizeKeyword } from '../autocomplete';
 import { fetchSiteSitemapUrls, buildSiteContextProfile } from './site-context';
+import { classifyTopicalRelevance } from '../llm';
 
 export type ActionType =
   | 'create_pillar'
@@ -77,15 +78,14 @@ export async function generateSearchOpportunityGraph(
   }
 
   // 2. Fetch or build site context for topical relevance filtering
-  let siteKeywords: string[] = [];
+  let siteContextSummary = `Website Domain: ${cleanSite}`;
   try {
     const profile = await buildSiteContextProfile(`https://${cleanSite}`);
-    siteKeywords = [
-      ...profile.topTopics.map((t) => t.toLowerCase()),
-      ...profile.coreServices.map((s) => s.toLowerCase()),
-      profile.businessType.toLowerCase(),
-      profile.siteName.toLowerCase(),
-    ];
+    siteContextSummary = `Brand: ${profile.siteName} (${profile.businessType})
+Audience: ${profile.targetAudience}
+Top Topics: ${profile.topTopics.join(', ')}
+Core Services: ${profile.coreServices.join(', ')}
+Summary: ${profile.situationalSummary}`;
   } catch {
     // Context profile non-blocking
   }
@@ -115,19 +115,22 @@ export async function generateSearchOpportunityGraph(
       language,
     });
 
-    // Domain Topical Relevance Filter
-    // Filter out unrelated generic autocomplete noise (e.g. aquarium/marine terms for AI software domains)
-    const filteredExpanded = expanded.keywords.filter((k) => {
-      const kwLower = k.keyword.toLowerCase();
-      if (
-        siteKeywords.length > 0 &&
-        /(reef tank|aquarium|fish tank|coral|water pump|wave maker reef|power head|powerhead|marine tank|bubbler vs|wave maker vs)/i.test(kwLower) &&
-        !siteKeywords.some((sk) => sk.includes('aquarium') || sk.includes('fish') || sk.includes('reef') || sk.includes('pump'))
-      ) {
-        return false;
+    // 3. Autonomous Semantic LLM Relevance Guardrail
+    // Batch classify autocomplete queries against site topical scope
+    const rawExpandedList = expanded.keywords.map((k) => k.keyword);
+    let approvedQueries: string[] = rawExpandedList;
+    try {
+      if (process.env.OPENROUTER_API_KEY && rawExpandedList.length > 0) {
+        approvedQueries = await classifyTopicalRelevance(siteContextSummary, rawExpandedList.slice(0, 25));
       }
-      return true;
-    });
+    } catch {
+      approvedQueries = rawExpandedList;
+    }
+
+    const approvedSet = new Set(approvedQueries.map((q) => q.toLowerCase().trim()));
+    const filteredExpanded = expanded.keywords.filter((k) =>
+      approvedSet.has(k.keyword.toLowerCase().trim())
+    );
 
     const relatedKwCount = filteredExpanded.length;
     const isStrikingDistance = row.position >= 10 && row.position <= 25;

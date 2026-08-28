@@ -45,6 +45,68 @@ export interface LlmCompetitorGapResponse {
   differentiationStrategy: string;
 }
 
+/**
+ * Autonomous Semantic Topical Relevance Classifier
+ * Filters out out-of-scope homonyms/noise queries using DeepSeek
+ */
+export async function classifyTopicalRelevance(
+  siteContextStr: string,
+  queries: string[]
+): Promise<string[]> {
+  if (queries.length === 0) return [];
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) return queries; // fallback to unfiltered if no key
+
+  try {
+    const prompt = `You are a strict SEO topic relevance auditor.
+Website Context:
+${siteContextStr}
+
+Given this list of discovered search queries:
+${queries.map((q, idx) => `${idx + 1}. "${q}"`).join('\n')}
+
+Filter this list and return ONLY the queries that are genuinely relevant and in-scope for this business/website.
+Reject homonyms, completely unrelated products, and off-topic niche queries.
+
+Return ONLY a JSON array of the approved relevant queries, formatted like:
+["query 1", "query 2"]`;
+
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://google-keyword-dominator.vercel.app',
+        'X-Title': 'Google Keyword Dominator',
+      },
+      body: JSON.stringify({
+        model: OPENROUTER_MODEL,
+        messages: [
+          { role: 'system', content: 'You are an expert SEO relevance classifier. Always output pure valid JSON.' },
+          { role: 'user', content: prompt },
+        ],
+        temperature: 0.1,
+      }),
+    });
+
+    if (!res.ok) return queries;
+    const data = await res.json();
+    const content = data.choices?.[0]?.message?.content?.trim();
+    if (!content) return queries;
+
+    const match = content.match(/\[[\s\S]*\]/);
+    if (match) {
+      const parsed = JSON.parse(match[0]) as string[];
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.map((q) => q.toLowerCase().trim());
+      }
+    }
+    return queries;
+  } catch {
+    return queries;
+  }
+}
+
 export async function generateOpenRouterRawText(
   systemPrompt: string,
   userPrompt: string,
