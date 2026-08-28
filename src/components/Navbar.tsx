@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import {
   Zap,
@@ -10,8 +10,12 @@ import {
   BookOpen,
   Globe,
   ChevronDown,
+  Check,
+  LogOut,
+  ExternalLink,
+  Plus,
 } from 'lucide-react';
-import { GscConnectedSnapshot } from '@/lib/gsc/types';
+import { GscConnectedSnapshot, GscProperty } from '@/lib/gsc/types';
 
 export type MainNavTab = 'explorer' | 'content-gap' | 'serp-matrix' | 'content-brief' | 'gsc-striking' | 'intelligence';
 
@@ -23,8 +27,11 @@ interface NavbarProps {
   onOpenGscModal: () => void;
   onOpenIntelligenceModal: () => void;
   gscSnapshot: GscConnectedSnapshot | null;
+  properties?: GscProperty[];
   selectedProperty?: string;
+  onSelectProperty?: (url: string) => void;
   isAuthenticated?: boolean;
+  onLogout?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -33,10 +40,29 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenContentGap,
   onOpenIntelligenceModal,
   gscSnapshot,
-  selectedProperty,
+  properties = [],
+  selectedProperty = '',
+  onSelectProperty,
   isAuthenticated = false,
+  onLogout,
 }) => {
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
+
   const currentDomain = (selectedProperty || gscSnapshot?.property || '').replace(/^(sc-domain:|https?:\/\/)/, '').replace(/\/$/, '') || 'trailgearhub.com';
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   return (
     <header className="border-b border-slate-200 bg-white/95 backdrop-blur-md sticky top-0 z-50">
@@ -117,16 +143,16 @@ export const Navbar: React.FC<NavbarProps> = ({
             </Link>
           </nav>
 
-          {/* Right Action: Active Domain Status Pill (#5) */}
-          <div className="flex items-center gap-2">
+          {/* Right Action: GSC Property Switcher & Account Dropdown */}
+          <div className="relative" ref={dropdownRef}>
             <button
-              onClick={onOpenIntelligenceModal}
+              onClick={() => setIsDropdownOpen(!isDropdownOpen)}
               className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-2xs ${
                 isAuthenticated
                   ? 'bg-emerald-50 text-emerald-900 border-emerald-200 hover:bg-emerald-100'
                   : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
               }`}
-              title="Click to manage connected Google Search Console properties & opportunity graph"
+              title="Click to select Google Search Console property"
             >
               <span className={`w-2 h-2 rounded-full ${isAuthenticated ? 'bg-emerald-500 animate-pulse' : 'bg-blue-500'}`} />
               <Globe className="w-3.5 h-3.5 text-slate-400" />
@@ -136,8 +162,93 @@ export const Navbar: React.FC<NavbarProps> = ({
               {!isAuthenticated && (
                 <span className="text-[10px] text-slate-400 font-normal hidden sm:inline">(Demo)</span>
               )}
-              <ChevronDown className="w-3 h-3 text-slate-400" />
+              <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
             </button>
+
+            {/* Property Selector Dropdown Menu */}
+            {isDropdownOpen && (
+              <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-2xl border border-slate-200 py-2 z-50 animate-fadeIn">
+                <div className="px-3.5 py-2 border-b border-slate-100">
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">
+                    {isAuthenticated ? 'Connected GSC Properties' : 'Google Search Console Demo'}
+                  </span>
+                  <div className="font-extrabold text-xs text-slate-800 truncate mt-0.5">
+                    {currentDomain}
+                  </div>
+                </div>
+
+                {/* Property List */}
+                <div className="max-h-56 overflow-y-auto py-1 space-y-0.5">
+                  {properties.length > 0 ? (
+                    properties.map((p) => {
+                      const isSelected = selectedProperty === p.siteUrl;
+                      const cleanName = p.siteUrl.replace(/^(sc-domain:|https?:\/\/)/, '').replace(/\/$/, '');
+
+                      return (
+                        <button
+                          key={p.siteUrl}
+                          onClick={() => {
+                            if (onSelectProperty) onSelectProperty(p.siteUrl);
+                            setIsDropdownOpen(false);
+                          }}
+                          className={`w-full px-3.5 py-2 text-left text-xs font-semibold flex items-center justify-between hover:bg-blue-50/60 transition-colors cursor-pointer ${
+                            isSelected ? 'bg-blue-50 text-blue-900 font-bold' : 'text-slate-700'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Globe className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <span className="truncate">{cleanName}</span>
+                          </div>
+                          {isSelected && <Check className="w-4 h-4 text-blue-600 shrink-0" />}
+                        </button>
+                      );
+                    })
+                  ) : (
+                    <div className="px-3.5 py-2 text-xs text-slate-500">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-slate-800">trailgearhub.com</span>
+                        <span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-bold">Demo</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer Controls */}
+                <div className="p-2 border-t border-slate-100 bg-slate-50/50 space-y-1">
+                  {!isAuthenticated ? (
+                    <a
+                      href="/api/auth/google"
+                      className="w-full px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors shadow-xs"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Connect Live GSC Account</span>
+                    </a>
+                  ) : (
+                    <>
+                      <a
+                        href="/api/auth/google"
+                        className="w-full px-3 py-1.5 text-xs text-slate-600 hover:text-slate-900 hover:bg-white rounded-lg flex items-center justify-between font-semibold transition-colors"
+                      >
+                        <span>Re-authenticate Account</span>
+                        <ExternalLink className="w-3 h-3 text-slate-400" />
+                      </a>
+                      {onLogout && (
+                        <button
+                          onClick={() => {
+                            onLogout();
+                            setIsDropdownOpen(false);
+                          }}
+                          className="w-full px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50 rounded-lg flex items-center justify-between font-semibold transition-colors cursor-pointer"
+                        >
+                          <span>Disconnect Search Console</span>
+                          <LogOut className="w-3 h-3 text-rose-500" />
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

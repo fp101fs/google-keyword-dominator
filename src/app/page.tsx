@@ -319,8 +319,11 @@ export default function Home() {
         onOpenGscModal={() => setIsIntelligenceOpen(true)}
         onOpenIntelligenceModal={() => setIsIntelligenceOpen(true)}
         gscSnapshot={gscSnapshot}
+        properties={gscProperties}
         selectedProperty={selectedProperty}
+        onSelectProperty={handleSelectProperty}
         isAuthenticated={isAuthenticatedGsc}
+        onLogout={handleLogoutGsc}
       />
 
       {/* Main Container */}
