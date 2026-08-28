@@ -42,12 +42,25 @@ export interface FactoryGenerationResult {
 
 export async function runArticleFactoryPipeline(
   seed: string,
-  siteContext?: { siteName?: string; businessType?: string; targetAudience?: string },
+  siteContext?: {
+    siteName?: string;
+    businessType?: string;
+    targetAudience?: string;
+    situationalSummary?: string;
+    sampleSitemapUrls?: string[];
+  },
   outlineSeed?: string[]
 ): Promise<FactoryGenerationResult> {
-  const contextStr = siteContext?.siteName
-    ? `Target Site: ${siteContext.siteName} (${siteContext.businessType || 'Website'}) &bull; Audience: ${siteContext.targetAudience || 'General Searchers'}`
-    : '';
+  let contextStr = '';
+  if (siteContext?.siteName) {
+    contextStr += `Target Site: ${siteContext.siteName} (${siteContext.businessType || 'Website'}) &bull; Audience: ${siteContext.targetAudience || 'General Searchers'}`;
+    if (siteContext.situationalSummary) {
+      contextStr += `\nBrand Positioning: ${siteContext.situationalSummary}`;
+    }
+    if (siteContext.sampleSitemapUrls && siteContext.sampleSitemapUrls.length > 0) {
+      contextStr += `\nExisting Sitemap Pages for Internal Linking Context:\n${siteContext.sampleSitemapUrls.slice(0, 10).map((u) => `- ${u}`).join('\n')}`;
+    }
+  }
 
   // STEP 1: RESEARCH
   const researchPrompt = `Produce a concise bullet list of key facts, search intent angles, core pain points, and actionable talking points for a comprehensive guide on: "${seed}".

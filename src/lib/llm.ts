@@ -250,29 +250,49 @@ async function callOpenRouterWithWebFetch(url: string, prompt: string): Promise<
 }
 
 /**
- * 1. Content Brief Generator with Real-Time Web Search and Optional Site Context
+ * 1. Content Brief Generator with Real-Time Web Search, Site Context, Sitemap, and GSC Grounding
  */
 export async function generateLlmContentBrief(
   seed: string,
   rawKeywords: string[],
-  siteContext?: { siteName?: string; businessType?: string; targetAudience?: string; situationalSummary?: string }
+  siteContext?: {
+    siteName?: string;
+    businessType?: string;
+    targetAudience?: string;
+    situationalSummary?: string;
+    sampleSitemapUrls?: string[];
+  },
+  gscContext?: {
+    position?: number;
+    impressions?: number;
+    ctr?: number;
+  }
 ): Promise<LlmBriefResponse | null> {
-  const contextSnippet = siteContext?.situationalSummary
-    ? `\nClient Website Context:
+  let contextSnippet = '';
+  if (siteContext?.situationalSummary) {
+    contextSnippet += `\nClient Website Context:
 - Brand/Site Name: ${siteContext.siteName || 'Not specified'}
 - Business Type: ${siteContext.businessType || 'Website'}
 - Target Audience: ${siteContext.targetAudience || 'General Audience'}
-- Situational Knowledge: ${siteContext.situationalSummary}\nEnsure this brief directly reflects this business's specific situation and tone.`
-    : '';
+- Situational Knowledge: ${siteContext.situationalSummary}`;
+  }
+
+  if (siteContext?.sampleSitemapUrls && siteContext.sampleSitemapUrls.length > 0) {
+    contextSnippet += `\n- Existing Published Pages in Sitemap:\n${siteContext.sampleSitemapUrls.slice(0, 12).map((u) => `  * ${u}`).join('\n')}`;
+  }
+
+  if (gscContext && gscContext.impressions && gscContext.impressions > 0) {
+    contextSnippet += `\n- Existing GSC Performance on Domain: Avg Pos #${gscContext.position?.toFixed(1) || '15.0'}, Impressions: ${gscContext.impressions.toLocaleString()}, CTR: ${((gscContext.ctr || 0) * 100).toFixed(1)}%`;
+  }
 
   const prompt = `Use web_search to search Google for "${seed}" to discover the current People Also Ask (PAA) questions, search trends, and top ranking content structure.
 
-Target Seed Keyword: "${seed}"${contextSnippet}
+Target Seed Keyword: "${seed}"${contextSnippet ? `\n${contextSnippet}` : ''}
 Discovered Autocomplete Queries:
 ${rawKeywords.slice(0, 30).map((k) => `- ${k}`).join('\n')}
 
 Instructions:
-1. Write a compelling, click-worthy H1 title targeting the core intent (tailored to the business if context was provided).
+1. Write a compelling, click-worthy H1 title targeting the core intent (tailored directly to the business and existing sitemap structure if provided).
 2. Group the discovered keywords into 5-7 logical, sequential H2 subheadings that thoroughly cover the topic without fluff.
 3. Extract 4-6 genuine People Also Ask (PAA) user questions from Google search results. For each question, provide a concise, direct 2-sentence answer snippet optimized for Google Featured Snippets and FAQ Schema.
 4. Describe the target audience and primary content angle.
@@ -333,24 +353,38 @@ Return ONLY valid JSON:
 }
 
 /**
- * 3. Competitor Content Gap Synthesis via web_search
+ * 3. Competitor Content Gap Synthesis via web_search & Site Context
  */
 export async function synthesizeCompetitorGapWithLlm(
   targetSeed: string,
   competitorSeeds: string[],
-  discoveredGaps: string[]
+  discoveredGaps: string[],
+  siteContext?: {
+    siteName?: string;
+    businessType?: string;
+    targetAudience?: string;
+    situationalSummary?: string;
+  }
 ): Promise<LlmCompetitorGapResponse | null> {
-  const prompt = `Use web_search to analyze current competitor search results for target topic "${targetSeed}" vs competitors: ${competitorSeeds.join(', ')}.
+  let contextSnippet = '';
+  if (siteContext?.situationalSummary) {
+    contextSnippet = `\nOur Website Context:
+- Brand: ${siteContext.siteName || 'Our Site'} (${siteContext.businessType || 'Website'})
+- Target Audience: ${siteContext.targetAudience || 'General Audience'}
+- Situational Focus: ${siteContext.situationalSummary}`;
+  }
+
+  const prompt = `Use web_search to analyze current competitor search results for target topic "${targetSeed}" vs competitors: ${competitorSeeds.join(', ')}.${contextSnippet}
 Discovered keyword gaps:
 ${discoveredGaps.slice(0, 20).map((k) => `- ${k}`).join('\n')}
 
-Synthesize the competitor positioning and prescribe the optimal differentiation angle.
+Synthesize the competitor positioning and prescribe the optimal differentiation angle for OUR specific brand.
 
 Return ONLY valid JSON:
 {
   "topCompetitorAngles": ["Angle 1", "Angle 2"],
   "highOpportunitySubtopics": ["Subtopic 1", "Subtopic 2", "Subtopic 3"],
-  "differentiationStrategy": "1-2 sentence actionable strategy to outrank these competitors"
+  "differentiationStrategy": "1-2 sentence actionable strategy to outrank these competitors based on our unique strengths"
 }`;
 
   const jsonStr = await callOpenRouterWithSearch(prompt);

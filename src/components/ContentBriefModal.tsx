@@ -90,6 +90,7 @@ export const ContentBriefModal: React.FC<ContentBriefModalProps> = ({
                   businessType: loadedContext.businessType,
                   targetAudience: loadedContext.targetAudience,
                   situationalSummary: loadedContext.situationalSummary,
+                  sampleSitemapUrls: loadedContext.sampleSitemapUrls,
                 }
               : undefined,
           }),

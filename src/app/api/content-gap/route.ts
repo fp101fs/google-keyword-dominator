@@ -11,11 +11,12 @@ export const dynamic = 'force-dynamic';
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { targetSeed, competitorSeeds, country = 'US', language = 'en' } = body as {
+    const { targetSeed, competitorSeeds, country = 'US', language = 'en', siteUrl } = body as {
       targetSeed?: string;
       competitorSeeds?: string[];
       country?: string;
       language?: string;
+      siteUrl?: string;
     };
 
     const cleanTarget = normalizeKeyword(targetSeed || '');
@@ -42,6 +43,23 @@ export async function POST(req: NextRequest) {
         { error: `Rate limit reached. Please wait ${rateLimit.resetInSeconds}s.` },
         { status: 429 }
       );
+    }
+
+    // Optional: Extract site context profile for tailored differentiation
+    let siteContextProfile = undefined;
+    if (siteUrl && siteUrl.trim()) {
+      try {
+        const profileRes = await fetchSiteSitemapUrls(siteUrl.startsWith('http') ? siteUrl : `https://${siteUrl}`);
+        if (profileRes) {
+          siteContextProfile = {
+            siteName: siteUrl.replace(/^https?:\/\//, '').replace(/\/.*$/, ''),
+            businessType: 'Website',
+            situationalSummary: `Directly competing against ${cleanCompetitors.join(', ')}`,
+          };
+        }
+      } catch {
+        // Non-blocking
+      }
     }
 
     // 1. Fetch Target seed keywords
@@ -88,7 +106,7 @@ export async function POST(req: NextRequest) {
 
     // 4. Call genuine LLM via web_search to synthesize competitor strategy & differentiation
     const gapKeywords = gapAnalysis.gapOpportunities.map((k) => k.keyword);
-    const llmStrategy = await synthesizeCompetitorGapWithLlm(cleanTarget, cleanCompetitors, gapKeywords);
+    const llmStrategy = await synthesizeCompetitorGapWithLlm(cleanTarget, cleanCompetitors, gapKeywords, siteContextProfile);
 
     return NextResponse.json({
       success: true,

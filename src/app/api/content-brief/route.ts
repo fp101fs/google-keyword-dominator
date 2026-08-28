@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { seed, keywords, siteContext } = body as {
+    const { seed, keywords, siteContext, gscContext } = body as {
       seed?: string;
       keywords?: KeywordItem[];
       siteContext?: {
@@ -17,6 +17,12 @@ export async function POST(req: NextRequest) {
         businessType?: string;
         targetAudience?: string;
         situationalSummary?: string;
+        sampleSitemapUrls?: string[];
+      };
+      gscContext?: {
+        position?: number;
+        impressions?: number;
+        ctr?: number;
       };
     };
 
@@ -32,9 +38,9 @@ export async function POST(req: NextRequest) {
     // 1. Base structured brief from raw autocomplete queries
     const brief = generateContentBrief(normalizedSeed, keywords);
 
-    // 2. Call genuine LLM with optional site context & live Google PAA search
+    // 2. Call genuine LLM with enriched site context, sitemap URLs & GSC performance data
     const rawKeywordsList = keywords.map((k) => k.keyword);
-    const llmResult = await generateLlmContentBrief(normalizedSeed, rawKeywordsList, siteContext);
+    const llmResult = await generateLlmContentBrief(normalizedSeed, rawKeywordsList, siteContext, gscContext);
 
     return NextResponse.json({
       success: true,
