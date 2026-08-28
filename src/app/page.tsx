@@ -315,9 +315,11 @@ export default function Home() {
         onSelectTab={handleSelectNavTab}
         onOpenContentGap={() => setIsGapOpen(true)}
         onOpenContentBrief={() => setIsBriefOpen(true)}
-        onOpenGscModal={() => setIsGscModalOpen(true)}
+        onOpenGscModal={() => setIsIntelligenceOpen(true)}
         onOpenIntelligenceModal={() => setIsIntelligenceOpen(true)}
         gscSnapshot={gscSnapshot}
+        selectedProperty={selectedProperty}
+        isAuthenticated={isAuthenticatedGsc}
       />
 
       {/* Main Container */}
@@ -518,7 +520,11 @@ export default function Home() {
                     onOpenContentGap={() => setIsGapOpen(true)}
                     onInspectSerp={(kw) => setInspectedKeyword(kw)}
                     gscSnapshot={gscSnapshot}
-                    onOpenGscModal={() => setIsGscModalOpen(true)}
+                    onOpenGscModal={() => setIsIntelligenceOpen(true)}
+                    onGenerateBriefForKeyword={(kw) => {
+                      setActiveParams((prev) => ({ ...prev, query: kw }));
+                      setIsBriefOpen(true);
+                    }}
                   />
                 </>
               )}
