@@ -1,7 +1,8 @@
 'use client';
 
 import React from 'react';
-import { Zap, Search, Target, Grid, FileText, TrendingUp, Globe, Sparkles } from 'lucide-react';
+import Link from 'next/link';
+import { Zap, Search, Target, Grid, FileText, TrendingUp, Globe, Sparkles, BookOpen } from 'lucide-react';
 import { GscConnectedSnapshot } from '@/lib/gsc/types';
 
 export type MainNavTab = 'explorer' | 'content-gap' | 'serp-matrix' | 'content-brief' | 'gsc-striking' | 'intelligence';
@@ -141,6 +142,15 @@ export const Navbar: React.FC<NavbarProps> = ({
               <FileText className="w-3.5 h-3.5 text-indigo-600" />
               <span>Briefs</span>
             </button>
+
+            {/* 7. Dedicated User Guide */}
+            <Link
+              href="/guide"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-white/60 transition-all"
+            >
+              <BookOpen className="w-3.5 h-3.5 text-slate-500" />
+              <span>Guide</span>
+            </Link>
           </nav>
 
           {/* Right Action: GSC Status Pill */}
