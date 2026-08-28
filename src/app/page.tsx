@@ -152,7 +152,6 @@ export default function Home() {
   const filteredKeywords = useMemo(() => {
     return keywords.filter((item) => {
       const kw = item.keyword.toLowerCase();
-      // SubTab Filtering
       if (filters.subTab === 'matching') {
         if (!kw.includes(activeParams.query.toLowerCase())) return false;
       } else if (filters.subTab === 'questions') {
@@ -247,7 +246,6 @@ export default function Home() {
             onSearch={handleSearch}
             isLoading={isLoading}
             initialParams={activeParams}
-            onOpenContentGap={() => setIsGapOpen(true)}
           />
         </section>
 

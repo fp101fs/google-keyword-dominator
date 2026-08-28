@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Search, Loader2, Sparkles, SlidersHorizontal, Layers, Target } from 'lucide-react';
+import { Search, Loader2, Sparkles, SlidersHorizontal, Layers } from 'lucide-react';
 import { PlatformTabs } from './PlatformTabs';
 import { PlatformType } from '@/lib/platforms';
 import { COUNTRIES } from '@/lib/countries';
@@ -28,7 +28,6 @@ export const SearchForm: React.FC<SearchFormProps> = ({
   onSearch,
   isLoading,
   initialParams,
-  onOpenContentGap,
 }) => {
   const [platform, setPlatform] = useState<PlatformType>(initialParams?.platform || 'google');
   const [query, setQuery] = useState<string>(initialParams?.query || '');
@@ -68,17 +67,6 @@ export const SearchForm: React.FC<SearchFormProps> = ({
         />
 
         <div className="flex items-center gap-2">
-          {onOpenContentGap && (
-            <button
-              type="button"
-              onClick={onOpenContentGap}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 transition-all cursor-pointer shadow-2xs"
-            >
-              <Target className="w-3.5 h-3.5 text-rose-600" />
-              <span>Ahrefs Content Gap</span>
-            </button>
-          )}
-
           <button
             type="button"
             onClick={() => setIsBulkMode(!isBulkMode)}
