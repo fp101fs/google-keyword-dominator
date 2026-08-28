@@ -1,15 +1,18 @@
 'use client';
 
 import React from 'react';
-import { Zap, Search, Target, Grid, FileText } from 'lucide-react';
+import { Zap, Search, Target, Grid, FileText, TrendingUp, Globe } from 'lucide-react';
+import { GscConnectedSnapshot } from '@/lib/gsc/types';
 
-export type MainNavTab = 'explorer' | 'content-gap' | 'serp-matrix' | 'content-brief';
+export type MainNavTab = 'explorer' | 'content-gap' | 'serp-matrix' | 'content-brief' | 'gsc-striking';
 
 interface NavbarProps {
   activeTab: MainNavTab;
   onSelectTab: (tab: MainNavTab) => void;
   onOpenContentGap: () => void;
   onOpenContentBrief: () => void;
+  onOpenGscModal: () => void;
+  gscSnapshot: GscConnectedSnapshot | null;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -17,6 +20,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSelectTab,
   onOpenContentGap,
   onOpenContentBrief,
+  onOpenGscModal,
+  gscSnapshot,
 }) => {
   return (
     <header className="border-b border-slate-200/80 bg-white/95 backdrop-blur-md sticky top-0 z-50 shadow-2xs">
@@ -45,7 +50,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* 1. Keyword Explorer */}
             <button
               onClick={() => onSelectTab('explorer')}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 activeTab === 'explorer'
                   ? 'bg-white text-slate-900 shadow-xs border border-slate-200/60'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
@@ -55,13 +60,38 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span>Keywords Explorer</span>
             </button>
 
-            {/* 2. Ahrefs Content Gap */}
+            {/* 2. GSC Striking Distance Opportunities */}
+            <button
+              onClick={() => {
+                onSelectTab('gsc-striking');
+                onOpenGscModal();
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                activeTab === 'gsc-striking'
+                  ? 'bg-white text-emerald-800 shadow-xs border border-emerald-300'
+                  : 'text-slate-600 hover:text-emerald-700 hover:bg-white/60'
+              }`}
+            >
+              <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
+              <span>GSC Striking Distance</span>
+              {gscSnapshot ? (
+                <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded-full font-mono">
+                  {gscSnapshot.strikingDistanceQueries.length}
+                </span>
+              ) : (
+                <span className="text-[9px] bg-slate-200 text-slate-700 px-1.5 py-0.2 rounded-full font-mono">
+                  GSC
+                </span>
+              )}
+            </button>
+
+            {/* 3. Ahrefs Content Gap */}
             <button
               onClick={() => {
                 onSelectTab('content-gap');
                 onOpenContentGap();
               }}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 activeTab === 'content-gap'
                   ? 'bg-white text-rose-700 shadow-xs border border-rose-200'
                   : 'text-slate-600 hover:text-rose-600 hover:bg-white/60'
@@ -72,7 +102,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span className="text-[9px] bg-rose-100 text-rose-800 px-1.5 py-0.2 rounded-full font-mono">Pro</span>
             </button>
 
-            {/* 3. SERP Overlap Matrix */}
+            {/* 4. SERP Overlap Matrix */}
             <button
               onClick={() => onSelectTab('serp-matrix')}
               className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
@@ -85,7 +115,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span>SERP Matrix</span>
             </button>
 
-            {/* 4. Content Brief Generator */}
+            {/* 5. Content Brief Generator */}
             <button
               onClick={() => {
                 onSelectTab('content-brief');
@@ -102,14 +132,18 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           </nav>
 
-          {/* Right Action Badges */}
+          {/* Right Action: GSC Status Pill */}
           <div className="flex items-center gap-2">
             <button
-              onClick={onOpenContentGap}
-              className="md:hidden inline-flex items-center gap-1 px-3 py-1.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold"
+              onClick={onOpenGscModal}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs border ${
+                gscSnapshot
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200'
+              }`}
             >
-              <Target className="w-3.5 h-3.5 text-rose-600" />
-              <span>Content Gap</span>
+              <Globe className="w-3.5 h-3.5 text-emerald-600" />
+              <span>{gscSnapshot ? gscSnapshot.property : 'Connect GSC'}</span>
             </button>
           </div>
         </div>

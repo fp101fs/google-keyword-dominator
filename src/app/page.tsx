@@ -16,10 +16,12 @@ import { CanvasNetworkGraph } from '@/components/CanvasNetworkGraph';
 import { ContentBriefModal } from '@/components/ContentBriefModal';
 import { SerpInspectorDrawer } from '@/components/SerpInspectorDrawer';
 import { ContentGapModal } from '@/components/ContentGapModal';
+import { GscStrikingModal } from '@/components/GscStrikingModal';
 import { LoadingState } from '@/components/LoadingState';
 import { EmptyState } from '@/components/EmptyState';
 import { FAQ } from '@/components/FAQ';
 import { KeywordItem, KeywordSummaryMetrics } from '@/lib/autocomplete';
+import { GscConnectedSnapshot } from '@/lib/gsc/types';
 import {
   ShieldCheck,
   Globe,
@@ -57,6 +59,11 @@ export default function Home() {
     'table' | 'bubbles' | 'serp' | 'hierarchy' | 'scatter' | 'treemap' | 'network' | 'tree'
   >('table');
 
+  // GSC State
+  const [gscSnapshot, setGscSnapshot] = useState<GscConnectedSnapshot | null>(null);
+  const [isGscModalOpen, setIsGscModalOpen] = useState<boolean>(false);
+  const [isLoadingGsc, setIsLoadingGsc] = useState<boolean>(false);
+
   // Modals & Drawers
   const [isBriefOpen, setIsBriefOpen] = useState<boolean>(false);
   const [isGapOpen, setIsGapOpen] = useState<boolean>(false);
@@ -79,10 +86,27 @@ export default function Home() {
       setIsGapOpen(true);
     } else if (tab === 'content-brief') {
       setIsBriefOpen(true);
+    } else if (tab === 'gsc-striking') {
+      setIsGscModalOpen(true);
     } else if (tab === 'serp-matrix') {
       setActiveView('serp');
     } else if (tab === 'explorer') {
       setActiveView('table');
+    }
+  };
+
+  const handleConnectGscDemo = async () => {
+    setIsLoadingGsc(true);
+    try {
+      const res = await fetch('/api/gsc/demo');
+      const data = await res.json();
+      if (data.success) {
+        setGscSnapshot(data.snapshot);
+      }
+    } catch {
+      // Demo load error fallback
+    } finally {
+      setIsLoadingGsc(false);
     }
   };
 
@@ -230,6 +254,8 @@ export default function Home() {
         onSelectTab={handleSelectNavTab}
         onOpenContentGap={() => setIsGapOpen(true)}
         onOpenContentBrief={() => setIsBriefOpen(true)}
+        onOpenGscModal={() => setIsGscModalOpen(true)}
+        gscSnapshot={gscSnapshot}
       />
 
       {/* Main Container */}
@@ -244,7 +270,7 @@ export default function Home() {
             Discover Real <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">Search Autocomplete</span> Ideas
           </h1>
           <p className="text-base sm:text-lg text-slate-600 leading-relaxed font-normal">
-            Generate authentic long-tail keyword suggestions from Google, YouTube, Amazon &amp; Bing. Uncover competitor keyword gaps, inspect live SERP top 10 rankings, and export ready-to-rank content briefs.
+            Generate authentic long-tail keyword suggestions from Google, YouTube, Amazon &amp; Bing. Connect Google Search Console to prioritize striking distance Page-2 queries and export ready-to-rank content briefs.
           </p>
         </section>
 
@@ -429,6 +455,8 @@ export default function Home() {
                     onOpenContentBrief={() => setIsBriefOpen(true)}
                     onOpenContentGap={() => setIsGapOpen(true)}
                     onInspectSerp={(kw) => setInspectedKeyword(kw)}
+                    gscSnapshot={gscSnapshot}
+                    onOpenGscModal={() => setIsGscModalOpen(true)}
                   />
                 </>
               )}
@@ -526,7 +554,7 @@ export default function Home() {
 
             <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-2xs space-y-3">
               <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-                <ShieldCheck className="w-5 h-5" />
+                <ShieldCheck className="w-4 h-4 text-emerald-600" />
               </div>
               <h3 className="text-base font-bold text-slate-900">100% Data Integrity</h3>
               <p className="text-sm text-slate-600 leading-relaxed">
@@ -541,6 +569,16 @@ export default function Home() {
           <FAQ />
         </section>
       </main>
+
+      {/* GSC Striking Distance Modal */}
+      <GscStrikingModal
+        isOpen={isGscModalOpen}
+        onClose={() => setIsGscModalOpen(false)}
+        connectedSnapshot={gscSnapshot}
+        onConnectDemo={handleConnectGscDemo}
+        isLoadingGsc={isLoadingGsc}
+        onSelectQueryForExpansion={(q) => handleSuggestionClick(q)}
+      />
 
       {/* Content Brief Modal */}
       <ContentBriefModal
