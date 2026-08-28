@@ -17,12 +17,48 @@ export interface AutocompleteResult {
   timestamp: number;
 }
 
+export type DifficultyLevel = 'Low' | 'Med' | 'High';
+export type HotLevel = 'Hottest keyword' | 'Hot keyword' | 'Trending' | '-';
+
 export interface KeywordItem {
   keyword: string;
+  seedKeyword: string;
+  source: string;       // Primary discovery source/query type (e.g. 'Google Search', 'Alphabet', 'Questions', etc.)
+  country: string;
+  ap: number;           // Autocomplete Placement rank (1 = 1st, 2 = 2nd, etc.)
+  apFormatted: string;  // '1st', '2nd', '3rd', '4th', etc.
+  diff: DifficultyLevel; // Difficulty level calculated mathematically
+  hot: HotLevel;        // Hotness status
+  relativeScore: number; // Transparent score 0-100 (e.g., 97.59)
   wordCount: number;
   charCount: number;
-  relativeScore: number; // Transparent mathematical score based on frequency, position, and specificity in result set
-  sources: string[];     // Subqueries that yielded this suggestion (e.g. 'root', 'a', 'b', 'wildcard')
+  sources: string[];
+}
+
+export interface KeywordSummaryMetrics {
+  totalKeywords: number;
+  hotKeywordsCount: number;
+  avgScore: number;
+  avgAp: number;
+  apLte3Count: number;
+  difficultyBreakdown: {
+    low: number;
+    med: number;
+    high: number;
+  };
+  seedCount: number;
+}
+
+/**
+ * Formats an AP rank number into ordinal string ('1st', '2nd', '3rd', etc.)
+ */
+export function formatAp(ap: number): string {
+  const j = ap % 10;
+  const k = ap % 100;
+  if (j === 1 && k !== 11) return `${ap}st`;
+  if (j === 2 && k !== 12) return `${ap}nd`;
+  if (j === 3 && k !== 13) return `${ap}rd`;
+  return `${ap}th`;
 }
 
 /**
@@ -73,7 +109,6 @@ export async function fetchGoogleSuggestions(options: AutocompleteOptions): Prom
     }
 
     const data = await res.json();
-    // Format for client=chrome is: [query, [sugg1, sugg2, ...], [desc1, ...], [], { "google:suggestrelevance": [...] }]
     if (Array.isArray(data) && Array.isArray(data[1])) {
       const rawList = data[1] as unknown[];
       const suggestions: string[] = [];
@@ -99,13 +134,6 @@ export async function fetchGoogleSuggestions(options: AutocompleteOptions): Prom
   }
 }
 
-/**
- * Expansion modes:
- * - normal (deep mode default): root seed + top letters/questions/prepositions to guarantee 100+ genuine suggestions
- * - alphabet: full exhaustive a-z, 0-9
- * - questions: exhaustive question modifiers
- * - prepositions: exhaustive prepositions
- */
 export interface BatchKeywordRequest {
   seed: string;
   country: string;
@@ -118,7 +146,6 @@ export interface BatchKeywordRequest {
 
 const ALPHABET = 'abcdefghijklmnopqrstuvwxyz'.split('');
 const NUMBERS = '0123456789'.split('');
-const TOP_EXPANSIONS = ['a', 'b', 'c', 'd', 'e', 'f', 's', 'm', 'p', 't', 'for', 'with', 'how', 'best', 'vs', 'online', 'app', 'free', 'near me'];
 const QUESTION_PREFIXES = ['how', 'what', 'why', 'where', 'who', 'when', 'can', 'which', 'is', 'are', 'best', 'top', 'vs'];
 const PREPOSITIONS = ['for', 'with', 'without', 'to', 'in', 'near', 'on', 'like', 'under', 'vs'];
 
@@ -129,60 +156,85 @@ const PREPOSITIONS = ['for', 'with', 'without', 'to', 'in', 'near', 'on', 'like'
 export async function getExpandedKeywords(
   req: BatchKeywordRequest,
   onProgress?: (completed: number, total: number) => void
-): Promise<{ keywords: KeywordItem[]; totalQueriesExecuted: number }> {
+): Promise<{
+  keywords: KeywordItem[];
+  metrics: KeywordSummaryMetrics;
+  totalQueriesExecuted: number;
+}> {
   const seed = normalizeKeyword(req.seed);
   if (!seed) {
-    return { keywords: [], totalQueriesExecuted: 0 };
+    return {
+      keywords: [],
+      metrics: {
+        totalKeywords: 0,
+        hotKeywordsCount: 0,
+        avgScore: 0,
+        avgAp: 0,
+        apLte3Count: 0,
+        difficultyBreakdown: { low: 0, med: 0, high: 0 },
+        seedCount: 0,
+      },
+      totalQueriesExecuted: 0,
+    };
   }
 
   // Construct legitimate subqueries
-  const subqueries: { query: string; source: string }[] = [];
+  const subqueries: { query: string; source: string; category: string }[] = [];
 
   // 1. Root query
-  subqueries.push({ query: seed, source: 'seed' });
+  subqueries.push({ query: seed, source: 'seed', category: 'Google' });
 
-  // 2. If user enabled specific expansion toggles, do full expansions
+  // 2. Specific expansion toggles
   if (req.includeAlphabet) {
     for (const char of ALPHABET) {
-      subqueries.push({ query: `${seed} ${char}`, source: `suffix-${char}` });
+      subqueries.push({ query: `${seed} ${char}`, source: `suffix-${char}`, category: 'Alphabet' });
     }
     for (const num of NUMBERS) {
-      subqueries.push({ query: `${seed} ${num}`, source: `suffix-${num}` });
+      subqueries.push({ query: `${seed} ${num}`, source: `suffix-${num}`, category: 'Numbers' });
     }
   }
 
   if (req.includeQuestions) {
     for (const q of QUESTION_PREFIXES) {
-      subqueries.push({ query: `${q} ${seed}`, source: `question-${q}` });
+      subqueries.push({ query: `${q} ${seed}`, source: `question-${q}`, category: 'Questions' });
     }
   }
 
   if (req.includePrepositions) {
     for (const prep of PREPOSITIONS) {
-      subqueries.push({ query: `${seed} ${prep}`, source: `prep-${prep}` });
+      subqueries.push({ query: `${seed} ${prep}`, source: `prep-${prep}`, category: 'Prepositions' });
     }
   }
 
-  // 3. Default deep discovery: If no specific option is toggled, query top letters & modifiers to return 100+ real keywords
+  // 3. Default deep discovery: If no specific option is toggled, query alphabet & top modifiers
   if (!req.includeAlphabet && !req.includeQuestions && !req.includePrepositions) {
     for (const char of ALPHABET) {
-      subqueries.push({ query: `${seed} ${char}`, source: `alpha-${char}` });
+      subqueries.push({ query: `${seed} ${char}`, source: `alpha-${char}`, category: 'Alphabet' });
     }
     for (const q of ['how to', 'best', 'for', 'with', 'vs']) {
-      subqueries.push({ query: `${q} ${seed}`, source: `mod-${q}` });
+      subqueries.push({ query: `${q} ${seed}`, source: `mod-${q}`, category: 'Modifier' });
     }
   }
 
   // Execute subqueries with concurrency limiter (batch size 6)
   const CONCURRENCY = 6;
-  const resultMap = new Map<string, { keyword: string; sources: Set<string>; minRank: number; occurrences: number }>();
+  const resultMap = new Map<
+    string,
+    {
+      keyword: string;
+      sources: Set<string>;
+      categories: Set<string>;
+      minRank: number; // 0-indexed position in Google's autocomplete list
+      occurrences: number;
+    }
+  >();
   let completed = 0;
   const total = subqueries.length;
 
   for (let i = 0; i < subqueries.length; i += CONCURRENCY) {
     const batch = subqueries.slice(i, i + CONCURRENCY);
     await Promise.all(
-      batch.map(async ({ query, source }) => {
+      batch.map(async ({ query, source, category }) => {
         try {
           const suggestions = await fetchGoogleSuggestions({
             query,
@@ -196,19 +248,21 @@ export async function getExpandedKeywords(
             const existing = resultMap.get(key);
             if (existing) {
               existing.sources.add(source);
+              existing.categories.add(category);
               existing.occurrences += 1;
               if (rank < existing.minRank) existing.minRank = rank;
             } else {
               resultMap.set(key, {
                 keyword: kw,
                 sources: new Set([source]),
+                categories: new Set([category]),
                 minRank: rank,
                 occurrences: 1,
               });
             }
           });
         } catch {
-          // If an individual subquery fails or is rate-limited, skip it without manufacturing data
+          // If an individual subquery fails or is rate-limited, skip without manufacturing data
         } finally {
           completed++;
           if (onProgress) {
@@ -218,32 +272,62 @@ export async function getExpandedKeywords(
       })
     );
 
-    // Small delay between batches to respect rate limits
     if (i + CONCURRENCY < subqueries.length) {
       await new Promise((r) => setTimeout(r, 60));
     }
   }
 
-  // Calculate relative scores based ONLY on actual returned data
+  // Calculate metrics and relative score based ONLY on actual returned data
   const maxOccurrences = Math.max(1, ...Array.from(resultMap.values()).map((v) => v.occurrences));
   
   const keywords: KeywordItem[] = Array.from(resultMap.values()).map((entry) => {
     const words = entry.keyword.split(/\s+/).filter(Boolean);
     const wordCount = words.length;
     const charCount = entry.keyword.length;
+    const ap = entry.minRank + 1; // 1-indexed Autocomplete Placement (1st, 2nd, ...)
 
-    // Mathematical Relative Score Formula (0-100 scale):
-    // - Occurrences across subqueries: 60%
-    // - Suggestion position rank (rank 0 = top relevance): 40%
+    // Transparent Relative Score Calculation (0-100):
+    // 60% weight from discovery frequency across subqueries, 40% weight from AP position
     const occurrenceFactor = (entry.occurrences / maxOccurrences) * 60;
     const rankFactor = Math.max(0, (15 - entry.minRank) / 15) * 40;
-    const relativeScore = Math.round(occurrenceFactor + rankFactor);
+    const rawScore = occurrenceFactor + rankFactor;
+    // Format to 2 decimal places or rounded cleanly
+    const relativeScore = Number(Math.min(100, Math.max(1, rawScore)).toFixed(2));
+
+    // Calculate Difficulty (Diff) based on competition level:
+    // Higher AP (1-3) + shorter word count + high score = High competition / difficulty
+    let diff: DifficultyLevel = 'Med';
+    if (relativeScore >= 75 || (ap <= 2 && wordCount <= 2)) {
+      diff = 'High';
+    } else if (relativeScore < 45 || wordCount >= 5 || ap >= 8) {
+      diff = 'Low';
+    }
+
+    // Calculate Hot status:
+    // Hot keywords are the most popular / highest ranking terms in autocomplete (AP <= 3 or score >= 85)
+    let hot: HotLevel = '-';
+    if (relativeScore >= 90 || (ap === 1 && entry.sources.has('seed'))) {
+      hot = 'Hottest keyword';
+    } else if (relativeScore >= 70 || ap <= 3) {
+      hot = 'Hot keyword';
+    } else if (relativeScore >= 50) {
+      hot = 'Trending';
+    }
+
+    const primaryCategory = Array.from(entry.categories)[0] || 'Google';
 
     return {
       keyword: entry.keyword,
+      seedKeyword: seed,
+      source: primaryCategory,
+      country: req.country.toUpperCase(),
+      ap,
+      apFormatted: formatAp(ap),
+      diff,
+      hot,
+      relativeScore,
       wordCount,
       charCount,
-      relativeScore: Math.min(100, Math.max(1, relativeScore)),
       sources: Array.from(entry.sources),
     };
   });
@@ -251,8 +335,34 @@ export async function getExpandedKeywords(
   // Default sort by relativeScore descending
   keywords.sort((a, b) => b.relativeScore - a.relativeScore);
 
+  // Compute container summary metrics
+  const totalKeywords = keywords.length;
+  const hotKeywordsCount = keywords.filter((k) => k.hot === 'Hottest keyword' || k.hot === 'Hot keyword').length;
+  const avgScore = totalKeywords > 0
+    ? Number((keywords.reduce((acc, k) => acc + k.relativeScore, 0) / totalKeywords).toFixed(1))
+    : 0;
+  const avgAp = totalKeywords > 0
+    ? Number((keywords.reduce((acc, k) => acc + k.ap, 0) / totalKeywords).toFixed(1))
+    : 0;
+  const apLte3Count = keywords.filter((k) => k.ap <= 3).length;
+  
+  const difficultyBreakdown = {
+    low: keywords.filter((k) => k.diff === 'Low').length,
+    med: keywords.filter((k) => k.diff === 'Med').length,
+    high: keywords.filter((k) => k.diff === 'High').length,
+  };
+
   return {
     keywords,
+    metrics: {
+      totalKeywords,
+      hotKeywordsCount,
+      avgScore,
+      avgAp,
+      apLte3Count,
+      difficultyBreakdown,
+      seedCount: 1,
+    },
     totalQueriesExecuted: completed,
   };
 }

@@ -17,21 +17,31 @@ export function generateKeywordsCsv(
 ): string {
   const headers = [
     'Keyword',
-    'Relative Score (0-100)',
+    'Seed Keyword',
+    'Source',
+    'Country',
+    'AP',
+    'Difficulty',
+    'Hot',
+    'Score',
     'Word Count',
     'Character Count',
-    'Discovery Sources',
-    'Target Country',
+    'Discovery Queries',
     'Target Language',
   ];
 
   const rows = keywords.map((k) => [
     escapeCsvField(k.keyword),
+    escapeCsvField(k.seedKeyword),
+    escapeCsvField(k.source),
+    escapeCsvField(k.country),
+    escapeCsvField(k.apFormatted),
+    escapeCsvField(k.diff),
+    escapeCsvField(k.hot),
     escapeCsvField(k.relativeScore),
     escapeCsvField(k.wordCount),
     escapeCsvField(k.charCount),
     escapeCsvField(k.sources.join(', ')),
-    escapeCsvField(country),
     escapeCsvField(language),
   ]);
 

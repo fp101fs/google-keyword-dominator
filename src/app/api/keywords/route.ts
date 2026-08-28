@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
       req.headers.get('x-real-ip') ||
       'anonymous';
 
-    const rateLimit = checkRateLimit(clientIp, 45, 60 * 1000);
+    const rateLimit = checkRateLimit(clientIp, 60, 60 * 1000);
     if (!rateLimit.allowed) {
       return NextResponse.json(
         {
@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Fetch genuine autocomplete suggestions
-    const { keywords, totalQueriesExecuted } = await getExpandedKeywords({
+    const { keywords, metrics, totalQueriesExecuted } = await getExpandedKeywords({
       seed: normalized,
       country,
       language,
@@ -68,6 +68,7 @@ export async function GET(req: NextRequest) {
         language,
         total: keywords.length,
         totalQueriesExecuted,
+        metrics,
         keywords,
         timestamp: Date.now(),
       },

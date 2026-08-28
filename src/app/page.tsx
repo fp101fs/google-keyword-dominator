@@ -2,12 +2,13 @@
 
 import React, { useState, useMemo } from 'react';
 import { SearchForm, SearchParams } from '@/components/SearchForm';
+import { SummaryContainers } from '@/components/SummaryContainers';
 import { KeywordFilters, FilterState } from '@/components/KeywordFilters';
 import { KeywordTable } from '@/components/KeywordTable';
 import { LoadingState } from '@/components/LoadingState';
 import { EmptyState } from '@/components/EmptyState';
 import { FAQ } from '@/components/FAQ';
-import { KeywordItem } from '@/lib/autocomplete';
+import { KeywordItem, KeywordSummaryMetrics } from '@/lib/autocomplete';
 import { Sparkles, ShieldCheck, Globe, Zap, AlertCircle } from 'lucide-react';
 
 export default function Home() {
@@ -21,6 +22,7 @@ export default function Home() {
   });
 
   const [keywords, setKeywords] = useState<KeywordItem[]>([]);
+  const [metrics, setMetrics] = useState<KeywordSummaryMetrics | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState<boolean>(false);
@@ -57,6 +59,8 @@ export default function Home() {
       }
 
       setKeywords(data.keywords || []);
+      setMetrics(data.metrics || null);
+
       // Reset filter on new search
       setFilters({
         search: '',
@@ -70,6 +74,7 @@ export default function Home() {
       const message = err instanceof Error ? err.message : 'An unexpected error occurred while searching.';
       setError(message);
       setKeywords([]);
+      setMetrics(null);
     } finally {
       setIsLoading(false);
     }
@@ -112,6 +117,30 @@ export default function Home() {
       return true;
     });
   }, [keywords, filters]);
+
+  // Dynamic live metrics based on filtered results
+  const liveMetrics = useMemo((): KeywordSummaryMetrics | null => {
+    if (!filteredKeywords.length) return metrics;
+    const total = filteredKeywords.length;
+    const hotCount = filteredKeywords.filter((k) => k.hot === 'Hottest keyword' || k.hot === 'Hot keyword').length;
+    const avgScore = Number((filteredKeywords.reduce((acc, k) => acc + k.relativeScore, 0) / total).toFixed(1));
+    const avgAp = Number((filteredKeywords.reduce((acc, k) => acc + k.ap, 0) / total).toFixed(1));
+    const apLte3 = filteredKeywords.filter((k) => k.ap <= 3).length;
+    const diff = {
+      low: filteredKeywords.filter((k) => k.diff === 'Low').length,
+      med: filteredKeywords.filter((k) => k.diff === 'Med').length,
+      high: filteredKeywords.filter((k) => k.diff === 'High').length,
+    };
+    return {
+      totalKeywords: total,
+      hotKeywordsCount: hotCount,
+      avgScore,
+      avgAp,
+      apLte3Count: apLte3,
+      difficultyBreakdown: diff,
+      seedCount: 1,
+    };
+  }, [filteredKeywords, metrics]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-50 text-slate-900 flex flex-col font-sans selection:bg-blue-100 selection:text-blue-900">
@@ -181,7 +210,7 @@ export default function Home() {
         )}
 
         {/* Results Area */}
-        <section className="max-w-5xl mx-auto space-y-6">
+        <section className="max-w-6xl mx-auto space-y-6">
           {isLoading && (
             <LoadingState
               seed={activeParams.query}
@@ -204,6 +233,9 @@ export default function Home() {
 
           {!isLoading && !error && keywords.length > 0 && (
             <div className="space-y-6 animate-fadeIn">
+              {/* Top 7 Summary Metrics Containers in 1 Row */}
+              {liveMetrics && <SummaryContainers metrics={liveMetrics} />}
+
               {/* Filtering Toolbar */}
               <KeywordFilters
                 filters={filters}
