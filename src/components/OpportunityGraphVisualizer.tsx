@@ -2,7 +2,8 @@
 
 import React, { useState } from 'react';
 import { OpportunityAction } from '@/lib/intelligence/opportunity-graph';
-import { Sparkles, HelpCircle, FileText, CheckCircle2, ChevronRight } from 'lucide-react';
+import { Sparkles, HelpCircle, FileText, CheckCircle2, ChevronRight, BookmarkCheck, Check } from 'lucide-react';
+import { saveSprintItem } from '@/lib/action-cart';
 
 interface OpportunityGraphVisualizerProps {
   actions: OpportunityAction[];
@@ -18,6 +19,7 @@ export const OpportunityGraphVisualizer: React.FC<OpportunityGraphVisualizerProp
   onGenerateBrief,
 }) => {
   const [selectedCluster, setSelectedCluster] = useState<string>('all');
+  const [savedId, setSavedId] = useState<string | null>(null);
 
   // Group actions by actionType (Cluster Pillars)
   const clusters = [
@@ -61,6 +63,29 @@ export const OpportunityGraphVisualizer: React.FC<OpportunityGraphVisualizerProp
   const filteredActions = selectedCluster === 'all'
     ? actions
     : actions.filter((a) => a.actionType === selectedCluster);
+
+  const handleSaveAction = (act: OpportunityAction) => {
+    saveSprintItem({
+      type: 'opportunity_action',
+      title: `#${act.rank} ${act.title}`,
+      subtitle: `${act.actionLabel} &bull; Query: "${act.targetQuery}" &bull; Impact: ${act.estimatedTrafficImpact}`,
+      content: `Target Query: ${act.targetQuery}
+Action Type: ${act.actionLabel}
+Impact Potential: ${act.estimatedTrafficImpact}
+Confidence: ${act.evidence.confidence}
+Recommendation: ${act.evidence.recommendation}
+
+Evidence Points:
+- ${act.evidence.evidencePoints.join('\n- ')}`,
+      metadata: {
+        rank: act.rank,
+        targetQuery: act.targetQuery,
+      },
+    });
+
+    setSavedId(act.id);
+    setTimeout(() => setSavedId(null), 1500);
+  };
 
   return (
     <div className="space-y-6">
@@ -153,15 +178,29 @@ export const OpportunityGraphVisualizer: React.FC<OpportunityGraphVisualizerProp
               </div>
             </div>
 
-            {/* Bottom Actions */}
+            {/* Bottom Actions with Pin to Sprint (#5) */}
             <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
-              <button
-                onClick={() => onSelectAction(act)}
-                className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
-              >
-                <HelpCircle className="w-3.5 h-3.5 text-blue-600" />
-                <span>Evidence Why?</span>
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => onSelectAction(act)}
+                  className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
+                >
+                  <HelpCircle className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Why?</span>
+                </button>
+
+                <button
+                  onClick={() => handleSaveAction(act)}
+                  className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 border border-slate-200 rounded-xl transition-colors cursor-pointer"
+                  title="Save Action to Sprint Drawer"
+                >
+                  {savedId === act.id ? (
+                    <Check className="w-4 h-4 text-emerald-600" />
+                  ) : (
+                    <BookmarkCheck className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
 
               <button
                 onClick={() => onGenerateBrief(act.targetQuery)}

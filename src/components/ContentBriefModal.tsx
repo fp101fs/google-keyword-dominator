@@ -2,10 +2,11 @@
 
 import React, { useState, useEffect } from 'react';
 import { KeywordItem } from '@/lib/autocomplete';
-import { X, Copy, Check, FileText, Sparkles, HelpCircle, Layers, Gauge, Loader2, Globe } from 'lucide-react';
+import { X, Copy, Check, FileText, Sparkles, HelpCircle, Layers, Gauge, Loader2, Globe, BookmarkCheck } from 'lucide-react';
 import { PageGraderDrawer } from './PageGraderDrawer';
 import { LlmBriefResponse } from '@/lib/llm';
 import { SiteContextProfile } from '@/lib/intelligence/site-context';
+import { saveSprintItem } from '@/lib/action-cart';
 
 interface ContentBriefModalProps {
   seed: string;
@@ -23,6 +24,7 @@ export const ContentBriefModal: React.FC<ContentBriefModalProps> = ({
   siteUrl,
 }) => {
   const [copied, setCopied] = useState(false);
+  const [savedToSprint, setSavedToSprint] = useState(false);
   const [isGraderOpen, setIsGraderOpen] = useState(false);
   const [isLoadingLlm, setIsLoadingLlm] = useState(false);
   const [llmData, setLlmData] = useState<LlmBriefResponse | null>(null);
@@ -137,6 +139,21 @@ ${faqList.map((faq) => `### Q: ${faq.question}\n${faq.answerSnippet}`).join('\n\
     await navigator.clipboard.writeText(markdownContent);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleSaveToSprint = () => {
+    saveSprintItem({
+      type: 'content_brief',
+      title: `Content Brief: ${seed}`,
+      subtitle: `${h1Title} (${h2List.length} H2 sections, ${faqList.length} FAQs)`,
+      content: markdownContent,
+      metadata: {
+        seed,
+        h1: h1Title,
+      },
+    });
+    setSavedToSprint(true);
+    setTimeout(() => setSavedToSprint(false), 2000);
   };
 
   return (
@@ -277,10 +294,12 @@ ${faqList.map((faq) => `### Q: ${faq.question}\n${faq.answerSnippet}`).join('\n\
 
             <div className="flex items-center gap-2">
               <button
-                onClick={onClose}
-                className="px-3.5 py-2 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold cursor-pointer transition-colors"
+                onClick={handleSaveToSprint}
+                className="px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+                title="Pin this brief to your Action Sprint Drawer"
               >
-                Close
+                {savedToSprint ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <BookmarkCheck className="w-3.5 h-3.5 text-blue-600" />}
+                <span>{savedToSprint ? 'Saved to Sprint' : 'Save to Sprint'}</span>
               </button>
               <button
                 onClick={() => {

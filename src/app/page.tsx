@@ -18,6 +18,7 @@ import { SerpInspectorDrawer } from '@/components/SerpInspectorDrawer';
 import { ContentGapModal } from '@/components/ContentGapModal';
 import { GscStrikingModal } from '@/components/GscStrikingModal';
 import { SearchIntelligenceModal } from '@/components/SearchIntelligenceModal';
+import { ActionCartDrawer } from '@/components/ActionCartDrawer';
 import { LoadingState } from '@/components/LoadingState';
 import { EmptyState } from '@/components/EmptyState';
 import { FAQ } from '@/components/FAQ';
@@ -687,6 +688,9 @@ export default function Home() {
         keywordItem={inspectedKeyword}
         onClose={() => setInspectedKeyword(null)}
       />
+
+      {/* Global Sticky Action Sprint & Saved Items Drawer */}
+      <ActionCartDrawer />
 
       {/* Footer */}
       <footer className="border-t border-slate-200 bg-white py-8 mt-16 text-center text-xs text-slate-500">
