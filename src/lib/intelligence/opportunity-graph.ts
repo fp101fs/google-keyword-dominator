@@ -5,12 +5,12 @@
  * 1. GSC ranking footprints (impressions, positions, CTR)
  * 2. Live Sitemap.xml URL structure (exact page existence check)
  * 3. Autocomplete cluster expansion (Google search demand)
- * 4. Domain Context Relevance Filtering (Anti-hallucination / Anti-irrelevant topics)
+ * 4. Domain Context Relevance Filtering (Single-call source of truth)
  * 5. Strict Deduplication & Semantic Topic Clustering
  */
 
 import { GscQueryItem } from '../gsc/types';
-import { getExpandedKeywords, normalizeKeyword } from '../autocomplete';
+import { getExpandedKeywords, normalizeKeyword, KeywordItem } from '../autocomplete';
 import { fetchSiteSitemapUrls, buildSiteContextProfile } from './site-context';
 import { classifyTopicalRelevance } from '../llm';
 
@@ -68,16 +68,16 @@ export async function generateSearchOpportunityGraph(
   const actions: OpportunityAction[] = [];
   const cleanSite = siteUrl.replace(/^(sc-domain:|https?:\/\/)/, '').replace(/\/$/, '');
 
-  // 1. Fetch live sitemap URLs for accurate page existence cross-referencing
+  // 1. Fetch live sitemap URLs in parallel
   let sitemapUrls: string[] = [];
   try {
     const sitemapData = await fetchSiteSitemapUrls(`https://${cleanSite}`);
     sitemapUrls = sitemapData.urls;
   } catch {
-    // Sitemap discovery non-blocking
+    // Non-blocking
   }
 
-  // 2. Fetch or build site context for topical relevance filtering
+  // 2. Fetch site context profile (Source of Truth)
   let siteContextSummary = `Website Domain: ${cleanSite}`;
   try {
     const profile = await buildSiteContextProfile(`https://${cleanSite}`);
@@ -87,10 +87,10 @@ Top Topics: ${profile.topTopics.join(', ')}
 Core Services: ${profile.coreServices.join(', ')}
 Summary: ${profile.situationalSummary}`;
   } catch {
-    // Context profile non-blocking
+    // Non-blocking
   }
 
-  // Deduplicate and filter queries
+  // 3. Deduplicate input GSC queries
   const uniqueGscQueries = Array.from(
     new Map(gscQueries.map((q) => [normalizeKeyword(q.query), q])).values()
   );
@@ -99,36 +99,55 @@ Summary: ${profile.situationalSummary}`;
     .sort((a, b) => b.impressions - a.impressions)
     .slice(0, 20);
 
+  // 4. Batch autocomplete expansions in parallel
+  const expansionsMap = new Map<string, KeywordItem[]>();
+  const allCandidateKeywords = new Set<string>();
+
+  await Promise.all(
+    topQueries.map(async (row) => {
+      const norm = normalizeKeyword(row.query);
+      if (!norm) return;
+      try {
+        const expanded = await getExpandedKeywords({
+          seeds: [norm],
+          country,
+          language,
+        });
+        expansionsMap.set(norm, expanded.keywords);
+        expanded.keywords.slice(0, 15).forEach((k) => allCandidateKeywords.add(k.keyword));
+      } catch {
+        // Fallback
+      }
+    })
+  );
+
+  // 5. Single Batch LLM Relevance Classification at Source of Truth (1 single LLM call for all queries)
+  let approvedSet = new Set<string>();
+  const candidateList = Array.from(allCandidateKeywords);
+
+  if (process.env.OPENROUTER_API_KEY && candidateList.length > 0) {
+    try {
+      const approvedList = await classifyTopicalRelevance(siteContextSummary, candidateList);
+      approvedSet = new Set(approvedList.map((q) => q.toLowerCase().trim()));
+    } catch {
+      approvedSet = new Set(candidateList.map((q) => q.toLowerCase().trim()));
+    }
+  } else {
+    approvedSet = new Set(candidateList.map((q) => q.toLowerCase().trim()));
+  }
+
   // Tracking sets for strict deduplication
   const seenActionKeys = new Set<string>();
   const seenPillars = new Set<string>();
   const seenFaqPages = new Set<string>();
 
+  // 6. Generate Actions from the verified Single Source of Truth
   for (const row of topQueries) {
     const norm = normalizeKeyword(row.query);
     if (!norm) continue;
 
-    // Expand search demand via Google autocomplete
-    const expanded = await getExpandedKeywords({
-      seeds: [norm],
-      country,
-      language,
-    });
-
-    // 3. Autonomous Semantic LLM Relevance Guardrail
-    // Batch classify autocomplete queries against site topical scope
-    const rawExpandedList = expanded.keywords.map((k) => k.keyword);
-    let approvedQueries: string[] = rawExpandedList;
-    try {
-      if (process.env.OPENROUTER_API_KEY && rawExpandedList.length > 0) {
-        approvedQueries = await classifyTopicalRelevance(siteContextSummary, rawExpandedList.slice(0, 25));
-      }
-    } catch {
-      approvedQueries = rawExpandedList;
-    }
-
-    const approvedSet = new Set(approvedQueries.map((q) => q.toLowerCase().trim()));
-    const filteredExpanded = expanded.keywords.filter((k) =>
+    const rawKeywords = expansionsMap.get(norm) || [];
+    const filteredExpanded = rawKeywords.filter((k) =>
       approvedSet.has(k.keyword.toLowerCase().trim())
     );
 
@@ -136,7 +155,7 @@ Summary: ${profile.situationalSummary}`;
     const isStrikingDistance = row.position >= 10 && row.position <= 25;
     const isHighImpressionLowCtr = row.position < 10 && row.ctr < 0.03 && row.impressions > 500;
 
-    // Check if target topic already matches a page in sitemap.xml
+    // Match page in sitemap.xml
     const normSlug = norm.toLowerCase().replace(/[^a-z0-9]+/g, '-');
     const matchedSitemapUrl = sitemapUrls.find((u) => {
       const lowerU = u.toLowerCase();
@@ -253,7 +272,7 @@ Summary: ${profile.situationalSummary}`;
       }
     }
 
-    // Rule C: Question Clusters -> Add FAQ / Schema Section (Max 1 per target page)
+    // Rule C: Question Clusters -> Add FAQ / Schema Section
     const questionQueries = filteredExpanded.filter(
       (k) =>
         /^(how|what|why|can|is|are|which|where)\b/i.test(k.keyword) ||
@@ -296,14 +315,12 @@ Summary: ${profile.situationalSummary}`;
       }
     }
 
-    // Rule D: Supporting Long-Tail Topic Spinoffs (Distinct non-duplicate subtopics)
+    // Rule D: Supporting Long-Tail Topic Spinoffs
     const longTailCommercial = filteredExpanded.filter(
       (k) =>
         k.intent === 'commercial' &&
         k.keyword.split(' ').length >= 4 &&
-        !seenPillars.has(k.keyword) &&
-        !k.keyword.toLowerCase().includes('reef') &&
-        !k.keyword.toLowerCase().includes('tank')
+        !seenPillars.has(k.keyword)
     ).slice(0, 1);
 
     if (longTailCommercial.length > 0) {
