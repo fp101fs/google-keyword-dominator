@@ -17,11 +17,17 @@ import {
   CheckCircle2,
   Copy,
   Check,
+  Download,
+  LayoutGrid,
+  List,
+  Gauge,
 } from 'lucide-react';
 import { GscConnectedSnapshot, GscProperty } from '@/lib/gsc/types';
 import { GscGapOpportunity, PageExpansionPlan, RankingsRescueTask } from '@/lib/intelligence/types';
 import { SearchOpportunityGraph, OpportunityAction } from '@/lib/intelligence/opportunity-graph';
+import { OpportunityGraphVisualizer } from './OpportunityGraphVisualizer';
 import { ContentBriefModal } from './ContentBriefModal';
+import { PageGraderDrawer } from './PageGraderDrawer';
 
 interface SearchIntelligenceModalProps {
   isOpen: boolean;
@@ -50,8 +56,10 @@ export const SearchIntelligenceModal: React.FC<SearchIntelligenceModalProps> = (
   // Search Opportunity Graph State
   const [graph, setGraph] = useState<SearchOpportunityGraph | null>(null);
   const [isLoadingGraph, setIsLoadingGraph] = useState<boolean>(false);
+  const [graphViewMode, setGraphViewMode] = useState<'visual' | 'list'>('visual');
   const [selectedActionForWhy, setSelectedActionForWhy] = useState<OpportunityAction | null>(null);
   const [briefSeed, setBriefSeed] = useState<string | null>(null);
+  const [gradeTargetUrl, setGradeTargetUrl] = useState<{ url: string; query: string } | null>(null);
   const [copiedActionId, setCopiedActionId] = useState<string | null>(null);
 
   // GSC Gap Opportunities State
@@ -223,6 +231,32 @@ export const SearchIntelligenceModal: React.FC<SearchIntelligenceModalProps> = (
       .then((r) => r.json())
       .then((d) => d.success && setRescueTasks(d.tasks))
       .finally(() => setIsLoadingRescue(false));
+  };
+
+  const handleExportCsv = () => {
+    if (!graph || graph.actions.length === 0) return;
+
+    const headers = ['Rank', 'Action Type', 'Title', 'Target Query', 'Suggested Slug', 'Target URL', 'Estimated Impact', 'Confidence', 'Recommendation'];
+    const rows = graph.actions.map((act) => [
+      act.rank,
+      `"${act.actionLabel}"`,
+      `"${act.title.replace(/"/g, '""')}"`,
+      `"${act.targetQuery.replace(/"/g, '""')}"`,
+      `"${act.suggestedSlug || ''}"`,
+      `"${act.targetPageUrl || ''}"`,
+      `"${act.estimatedTrafficImpact}"`,
+      `"${act.evidence.confidence}"`,
+      `"${act.evidence.recommendation.replace(/"/g, '""')}"`,
+    ]);
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `next-100-wins-${propertyTarget || 'domain'}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const handleCopyAction = async (action: OpportunityAction) => {
@@ -434,84 +468,125 @@ Evidence:
                       </div>
                     </div>
 
-                    {/* Actions List */}
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-extrabold uppercase tracking-wider text-slate-700">
-                          Simulated Next 100 Wins (Ranked by Leverage)
-                        </span>
-                        <span className="text-[11px] text-slate-500">
-                          Click <strong className="text-blue-600 font-bold">&quot;Why?&quot;</strong> to inspect evidence chain
-                        </span>
+                    {/* View Switcher & CSV Export Bar */}
+                    <div className="flex items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs">
+                      <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                        <button
+                          onClick={() => setGraphViewMode('visual')}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                            graphViewMode === 'visual' ? 'bg-white text-blue-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          <LayoutGrid className="w-3.5 h-3.5" />
+                          <span>Visual Matrix</span>
+                        </button>
+                        <button
+                          onClick={() => setGraphViewMode('list')}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                            graphViewMode === 'list' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          <List className="w-3.5 h-3.5" />
+                          <span>Ranked List</span>
+                        </button>
                       </div>
 
+                      <button
+                        onClick={handleExportCsv}
+                        className="px-3.5 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                      >
+                        <Download className="w-3.5 h-3.5 text-slate-600" />
+                        <span>Export 100 Wins (CSV)</span>
+                      </button>
+                    </div>
+
+                    {graphViewMode === 'visual' ? (
+                      <OpportunityGraphVisualizer
+                        actions={graph.actions}
+                        siteUrl={propertyTarget || 'domain.com'}
+                        onSelectAction={(act) => setSelectedActionForWhy(act)}
+                        onGenerateBrief={(seed) => setBriefSeed(seed)}
+                      />
+                    ) : (
+                      /* Actions List */
                       <div className="space-y-2">
-                        {graph.actions.map((act) => (
-                          <div
-                            key={act.id}
-                            className="p-3.5 bg-white rounded-xl border border-slate-200 hover:border-blue-300 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs group"
-                          >
-                            <div className="flex items-start gap-3 min-w-0">
-                              <span className="w-7 h-7 rounded-lg bg-slate-100 text-slate-700 font-black text-xs flex items-center justify-center shrink-0 border border-slate-200">
-                                #{act.rank}
-                              </span>
-                              <div className="min-w-0 space-y-1">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${act.actionBadgeClass}`}>
-                                    {act.actionLabel}
-                                  </span>
-                                  <span className="text-xs font-bold text-slate-900 truncate">
-                                    {act.title}
-                                  </span>
-                                </div>
-                                <p className="text-[11px] text-slate-500 truncate">
-                                  Target Query: <code className="text-blue-600 font-semibold">{act.targetQuery}</code>
-                                  {act.suggestedSlug && ` &bull; Slug: ${act.suggestedSlug}`}
-                                  {act.evidence.sitemapMatchedUrl && (
-                                    <span className="ml-2 text-teal-700 font-mono text-[10px] bg-teal-50 px-1.5 py-0.2 rounded border border-teal-200">
-                                      sitemap match: {act.evidence.sitemapMatchedUrl.split('/').pop() || 'page'}
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-extrabold uppercase tracking-wider text-slate-700">
+                            Prioritized Execution Plan (Top 100 Wins)
+                          </span>
+                          <span className="text-[11px] text-slate-500">
+                            Click <strong className="text-blue-600 font-bold">&quot;Why?&quot;</strong> to inspect full evidence chain
+                          </span>
+                        </div>
+
+                        <div className="space-y-2">
+                          {graph.actions.map((act) => (
+                            <div
+                              key={act.id}
+                              className="p-3.5 bg-white rounded-xl border border-slate-200 hover:border-blue-300 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs group"
+                            >
+                              <div className="flex items-start gap-3 min-w-0">
+                                <span className="w-7 h-7 rounded-lg bg-slate-100 text-slate-700 font-black text-xs flex items-center justify-center shrink-0 border border-slate-200">
+                                  #{act.rank}
+                                </span>
+                                <div className="min-w-0 space-y-1">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${act.actionBadgeClass}`}>
+                                      {act.actionLabel}
                                     </span>
+                                    <span className="text-xs font-bold text-slate-900 truncate">
+                                      {act.title}
+                                    </span>
+                                  </div>
+                                  <p className="text-[11px] text-slate-500 truncate">
+                                    Target Query: <code className="text-blue-600 font-semibold">{act.targetQuery}</code>
+                                    {act.suggestedSlug && ` &bull; Slug: ${act.suggestedSlug}`}
+                                    {act.evidence.sitemapMatchedUrl && (
+                                      <span className="ml-2 text-teal-700 font-mono text-[10px] bg-teal-50 px-1.5 py-0.2 rounded border border-teal-200">
+                                        sitemap match: {act.evidence.sitemapMatchedUrl.split('/').pop() || 'page'}
+                                      </span>
+                                    )}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                                <span className="text-xs font-mono font-black text-emerald-600 tracking-wider bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-200">
+                                  {act.estimatedTrafficImpact}
+                                </span>
+
+                                <button
+                                  onClick={() => setSelectedActionForWhy(act)}
+                                  className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
+                                >
+                                  <HelpCircle className="w-3.5 h-3.5 text-blue-600" />
+                                  <span>Why?</span>
+                                </button>
+
+                                <button
+                                  onClick={() => setBriefSeed(act.targetQuery)}
+                                  className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
+                                >
+                                  <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                                  <span>Brief</span>
+                                </button>
+
+                                <button
+                                  onClick={() => handleCopyAction(act)}
+                                  className="p-1.5 text-slate-400 hover:text-slate-700 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                                >
+                                  {copiedActionId === act.id ? (
+                                    <Check className="w-4 h-4 text-emerald-600" />
+                                  ) : (
+                                    <Copy className="w-4 h-4" />
                                   )}
-                                </p>
+                                </button>
                               </div>
                             </div>
-
-                            <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
-                              <span className="text-xs font-mono font-black text-emerald-600 tracking-wider bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-200">
-                                {act.estimatedTrafficImpact}
-                              </span>
-
-                              <button
-                                onClick={() => setSelectedActionForWhy(act)}
-                                className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
-                              >
-                                <HelpCircle className="w-3.5 h-3.5 text-blue-600" />
-                                <span>Why?</span>
-                              </button>
-
-                              <button
-                                onClick={() => setBriefSeed(act.targetQuery)}
-                                className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
-                              >
-                                <FileText className="w-3.5 h-3.5 text-indigo-600" />
-                                <span>Brief</span>
-                              </button>
-
-                              <button
-                                onClick={() => handleCopyAction(act)}
-                                className="p-1.5 text-slate-400 hover:text-slate-700 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-                              >
-                                {copiedActionId === act.id ? (
-                                  <Check className="w-4 h-4 text-emerald-600" />
-                                ) : (
-                                  <Copy className="w-4 h-4" />
-                                )}
-                              </button>
-                            </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 ) : null}
               </div>
@@ -665,16 +740,28 @@ Evidence:
                       </h5>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {expansionPlan.missingSubtopics.map((sub, i) => (
-                          <div key={i} className="p-3.5 bg-white rounded-xl border border-slate-200 space-y-1.5 text-xs shadow-2xs">
-                            <div className="font-bold text-slate-900 flex items-center justify-between">
-                              <span>{sub.title}</span>
-                              <span className="text-[10px] bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded border border-emerald-200 uppercase font-mono">
-                                {sub.type}
-                              </span>
+                          <div key={i} className="p-3.5 bg-white rounded-xl border border-slate-200 space-y-2 text-xs shadow-2xs flex flex-col justify-between">
+                            <div className="space-y-1">
+                              <div className="font-bold text-slate-900 flex items-center justify-between">
+                                <span>{sub.title}</span>
+                                <span className="text-[10px] bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded border border-emerald-200 uppercase font-mono">
+                                  {sub.type}
+                                </span>
+                              </div>
+                              <p className="text-slate-500 text-[11px]">
+                                Heading: <code className="text-blue-600 font-semibold">{sub.suggestedHeading}</code>
+                              </p>
                             </div>
-                            <p className="text-slate-500 text-[11px]">
-                              Heading: <code className="text-blue-600 font-semibold">{sub.suggestedHeading}</code>
-                            </p>
+
+                            <div className="pt-2 border-t border-slate-100 flex items-center justify-end">
+                              <button
+                                onClick={() => setBriefSeed(sub.suggestedHeading || sub.title)}
+                                className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                              >
+                                <FileText className="w-3 h-3 text-emerald-600" />
+                                <span>1-Click Section Brief (#4)</span>
+                              </button>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -719,13 +806,25 @@ Evidence:
                             </div>
                             <p className="text-slate-500">
                               Target Query: <code className="text-blue-600 font-semibold">{task.query}</code>
+                              {task.url && ` &bull; Page: ${task.url}`}
                             </p>
                           </div>
 
-                          <div className="flex items-center gap-2 font-mono text-[11px] text-slate-600">
-                            <span>Pos: <strong>#{task.impactMetrics.position.toFixed(1)}</strong></span>
-                            <span>Imp: <strong>{task.impactMetrics.impressions.toLocaleString()}</strong></span>
-                            <span>CTR: <strong>{(task.impactMetrics.ctr * 100).toFixed(1)}%</strong></span>
+                          <div className="flex items-center gap-2">
+                            {task.url && (
+                              <button
+                                onClick={() => setGradeTargetUrl({ url: task.url, query: task.query })}
+                                className="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                                title="Run live On-Page SEO audit on this underperforming page"
+                              >
+                                <Gauge className="w-3.5 h-3.5 text-amber-700" />
+                                <span>Grade Page (#2)</span>
+                              </button>
+                            )}
+                            <div className="font-mono text-[11px] text-slate-600">
+                              <span>Pos: <strong>#{task.impactMetrics.position.toFixed(1)}</strong></span> &bull;{' '}
+                              <span>Imp: <strong>{task.impactMetrics.impressions.toLocaleString()}</strong></span>
+                            </div>
                           </div>
                         </div>
 
@@ -854,6 +953,16 @@ Evidence:
           isOpen={!!briefSeed}
           onClose={() => setBriefSeed(null)}
           siteUrl={propertyTarget}
+        />
+      )}
+
+      {/* Sub-modal for 1-Click Page Grader */}
+      {gradeTargetUrl && (
+        <PageGraderDrawer
+          isOpen={!!gradeTargetUrl}
+          onClose={() => setGradeTargetUrl(null)}
+          initialUrl={gradeTargetUrl.url}
+          targetKeyword={gradeTargetUrl.query}
         />
       )}
     </>
