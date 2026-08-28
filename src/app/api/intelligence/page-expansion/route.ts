@@ -6,6 +6,7 @@ import { buildPageExpansionPlan } from '@/lib/intelligence/page-expansion';
 import { generateLlmPageTitleMeta } from '@/lib/llm';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60; // Extend Vercel serverless execution limit to 60s
 
 export async function POST(req: NextRequest) {
   try {
@@ -36,17 +37,24 @@ export async function POST(req: NextRequest) {
       language
     );
 
-    // Call LLM for genuine Title & Meta description recommendations
+    // Call DeepSeek LLM with graceful 5-second timeout fallback for instant responsiveness
     if (plan.currentQueries.length > 0) {
-      const llmTitleMeta = await generateLlmPageTitleMeta(targetUrl, plan.currentQueries);
-      if (llmTitleMeta) {
-        plan.titleMetaRecommendation = {
-          currentTitle: `${targetUrl.split('/').pop() || 'Page'}`,
-          recommendedTitle: llmTitleMeta.recommendedTitle,
-          currentMeta: '',
-          recommendedMeta: llmTitleMeta.recommendedMeta,
-          reason: llmTitleMeta.reason,
-        };
+      try {
+        const llmPromise = generateLlmPageTitleMeta(targetUrl, plan.currentQueries);
+        const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000));
+        const llmTitleMeta = await Promise.race([llmPromise, timeoutPromise]);
+
+        if (llmTitleMeta) {
+          plan.titleMetaRecommendation = {
+            currentTitle: `${targetUrl.split('/').pop() || 'Page'}`,
+            recommendedTitle: llmTitleMeta.recommendedTitle,
+            currentMeta: '',
+            recommendedMeta: llmTitleMeta.recommendedMeta,
+            reason: llmTitleMeta.reason,
+          };
+        }
+      } catch {
+        // Non-blocking LLM fallback
       }
     }
 
