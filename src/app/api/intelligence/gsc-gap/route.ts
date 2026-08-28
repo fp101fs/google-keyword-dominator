@@ -26,6 +26,7 @@ export async function POST(req: NextRequest) {
 
     const opportunities = await computeGscGapOpportunities(
       snapshot.queries || [],
+      snapshot.pages || [],
       country,
       language
     );

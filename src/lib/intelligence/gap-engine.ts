@@ -1,10 +1,38 @@
-import { GscQueryItem } from '../gsc/types';
+import { GscQueryItem, GscPageItem } from '../gsc/types';
 import { GscGapOpportunity, OpportunityTier } from './types';
 import { getExpandedKeywords } from '../autocomplete';
 
 /**
- * Filter out brand typos, fuzzy partial word collisions (e.g. "wavre battle", "wavrek", "wavreshop" for "wavreel")
- * Genuine autocomplete expansion must contain the full seed token as a distinct word or valid compound prefix.
+ * Extract topic keywords from URL slugs (e.g. "/blog/best-ai-audio-to-video-tools" -> "ai audio to video tools")
+ */
+function extractTopicFromUrl(url: string): string | null {
+  try {
+    const pathname = new URL(url).pathname;
+    const clean = pathname
+      .replace(/^\/(blog|articles|posts|p|guide|product)\//i, '')
+      .replace(/\//g, ' ')
+      .replace(/[-_]/g, ' ')
+      .trim();
+
+    // Filter out generic paths
+    if (!clean || clean.length < 3 || clean === 'dashboard' || clean === 'login' || clean === 'index') {
+      return null;
+    }
+
+    // Strip numbers or stop words like 'best' or '2026' from the seed to get the root topic
+    const topic = clean
+      .replace(/\b(best|top|202[0-9]|guide|review|how to)\b/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    return topic.length >= 3 ? topic : clean;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Filter out brand typos, fuzzy partial word collisions
  */
 function isRelevantQueryExpansion(seed: string, suggestion: string): boolean {
   const normSeed = seed.toLowerCase().trim();
@@ -12,40 +40,37 @@ function isRelevantQueryExpansion(seed: string, suggestion: string): boolean {
 
   if (normSeed === normSug) return false;
 
-  // Split into tokens
   const seedTokens = normSeed.split(/\s+/).filter(Boolean);
   const sugTokens = normSug.split(/\s+/).filter(Boolean);
 
-  // If seed is a multi-word phrase, all tokens or majority must be present
   if (seedTokens.length > 1) {
-    return seedTokens.every((token) => normSug.includes(token));
+    // If seed has multiple words, at least 60% of tokens must be present
+    const matchCount = seedTokens.filter((token) => normSug.includes(token)).length;
+    return matchCount >= Math.ceil(seedTokens.length * 0.6);
   }
 
-  // If seed is a single word (e.g. "wavreel"), check for whole word match or clean prefix/suffix
   const singleToken = seedTokens[0];
   if (!singleToken) return false;
 
-  // 1. Exact whole word presence
   const hasExactWord = sugTokens.some((t) => t === singleToken);
   if (hasExactWord) return true;
 
-  // 2. Starts with the full seed token followed by a modifier (e.g. "wavreel alternative", "wavreel review", "wavreel app")
   if (normSug.startsWith(singleToken + ' ') || normSug.endsWith(' ' + singleToken)) {
     return true;
   }
 
-  // Reject fuzzy word-morphing collisions (e.g. "wavrek", "wavre battle")
   return false;
 }
 
 /**
  * Computes GSC Gap Opportunities:
- * Takes top ranking GSC queries, runs genuine autocomplete expansion,
- * cleans out unrelated phonetic/spelling collisions, and categorizes every
- * opportunity into actionable intelligence tiers.
+ * For mature sites: Expands non-branded search queries from GSC.
+ * For new sites: Automatically parses content topics and URL slugs (e.g. "audio to video", "video generator")
+ * so you discover genuine industry demand rather than empty brand-name typos.
  */
 export async function computeGscGapOpportunities(
   gscQueries: GscQueryItem[],
+  gscPages: GscPageItem[] = [],
   country: string = 'US',
   language: string = 'en'
 ): Promise<GscGapOpportunity[]> {
@@ -75,8 +100,33 @@ export async function computeGscGapOpportunities(
     }
   });
 
-  // 2. Select top 5 high-traffic GSC queries to expand through Autocomplete
-  const topSeeds = gscQueries.slice(0, 5).map((q) => q.query);
+  // 2. Build intelligent seed list:
+  // - Top non-branded GSC queries (queries with >= 2 words)
+  // - URL topic slugs from published pages (crucial for new sites)
+  const candidateSeeds = new Set<string>();
+
+  // Extract from existing queries
+  gscQueries.forEach((q) => {
+    const trimmed = q.query.trim();
+    if (trimmed.includes(' ') || q.impressions >= 100) {
+      candidateSeeds.add(trimmed);
+    }
+  });
+
+  // Extract from published page URLs (e.g. "/best-ai-audio-to-video-tools" -> "ai audio to video tools")
+  gscPages.forEach((p) => {
+    const slugTopic = extractTopicFromUrl(p.url);
+    if (slugTopic) {
+      candidateSeeds.add(slugTopic);
+    }
+  });
+
+  // Fallback: If no seeds yet, take the first 3 available queries
+  if (candidateSeeds.size === 0 && gscQueries.length > 0) {
+    gscQueries.slice(0, 3).forEach((q) => candidateSeeds.add(q.query));
+  }
+
+  const topSeeds = Array.from(candidateSeeds).slice(0, 6);
 
   if (topSeeds.length > 0) {
     try {
@@ -93,7 +143,6 @@ export async function computeGscGapOpportunities(
       expandedItems.forEach((item) => {
         const normKw = item.keyword.toLowerCase().trim();
 
-        // Validate semantic relevance to avoid fuzzy word-morphing collisions like "wavrek" for "wavreel"
         if (!isRelevantQueryExpansion(item.seedKeyword, item.keyword)) {
           return;
         }
@@ -101,7 +150,6 @@ export async function computeGscGapOpportunities(
         const existingGsc = gscQueryMap.get(normKw);
 
         if (existingGsc) {
-          // Already ranking in GSC
           if (existingGsc.position >= 8 && existingGsc.position <= 25) {
             opportunities.push({
               query: item.keyword,
@@ -138,7 +186,7 @@ export async function computeGscGapOpportunities(
             });
           }
         } else {
-          // Top autocomplete demand NOT currently ranking in GSC (YELLOW TIER)
+          // Top non-branded autocomplete demand (YELLOW TIER)
           if (item.relativeScore >= 60) {
             opportunities.push({
               query: item.keyword,
@@ -146,7 +194,7 @@ export async function computeGscGapOpportunities(
               tier: 'yellow_new_content',
               tierLabel: 'High Demand • Zero GSC Coverage',
               tierBadgeClass: 'bg-amber-100 text-amber-900 border-amber-300',
-              tierDescription: `High autocomplete demand around "${item.seedKeyword}" that your site has 0 impressions for. Ideal candidate for new spin-off article.`,
+              tierDescription: `High search demand around topical sub-cluster "${item.seedKeyword}" that your site has 0 impressions for. Great opportunity for a new article.`,
               impressions: 0,
               clicks: 0,
               position: 0,
