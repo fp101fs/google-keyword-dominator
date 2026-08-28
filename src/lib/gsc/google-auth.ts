@@ -13,8 +13,13 @@ export function getRedirectUri(origin: string): string {
 }
 
 export function buildGoogleAuthUrl(origin: string, state: string = 'gkd_state'): string {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  if (!clientId) {
+    throw new Error('GOOGLE_CLIENT_ID environment variable is missing');
+  }
+
   const params = new URLSearchParams({
-    client_id: process.env.GOOGLE_CLIENT_ID || '',
+    client_id: clientId,
     redirect_uri: getRedirectUri(origin),
     response_type: 'code',
     scope: SCOPES,
@@ -32,13 +37,20 @@ export interface GoogleTokens {
 }
 
 export async function exchangeCodeForTokens(code: string, origin: string): Promise<GoogleTokens> {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+
+  if (!clientId || !clientSecret) {
+    throw new Error('Google OAuth credentials missing in environment variables');
+  }
+
   const res = await fetch(TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       code,
-      client_id: process.env.GOOGLE_CLIENT_ID || '',
-      client_secret: process.env.GOOGLE_CLIENT_SECRET || '',
+      client_id: clientId,
+      client_secret: clientSecret,
       redirect_uri: getRedirectUri(origin),
       grant_type: 'authorization_code',
     }),
@@ -59,13 +71,20 @@ export async function exchangeCodeForTokens(code: string, origin: string): Promi
 }
 
 export async function refreshGoogleAccessToken(refreshToken: string): Promise<GoogleTokens> {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+
+  if (!clientId || !clientSecret) {
+    throw new Error('Google OAuth credentials missing in environment variables');
+  }
+
   const res = await fetch(TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       refresh_token: refreshToken,
-      client_id: process.env.GOOGLE_CLIENT_ID || '',
-      client_secret: process.env.GOOGLE_CLIENT_SECRET || '',
+      client_id: clientId,
+      client_secret: clientSecret,
       grant_type: 'refresh_token',
     }),
   });
