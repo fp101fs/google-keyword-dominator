@@ -13,8 +13,7 @@ export interface GscGapOpportunity {
   ctr: number;
   page?: string;
   autocompleteScore: number;
-  recommendedAction: 'Add H2 / Missing Section' | 'Add FAQ Schema' | 'Create New Article' | 'Rewrite Title / Meta' | 'Consolidate Page';
-  actionPromptTemplate: string;
+  recommendedAction: string;
 }
 
 export interface PageExpansionPlan {
@@ -36,13 +35,6 @@ export interface PageExpansionPlan {
     suggestedHeading: string;
     type: 'section' | 'faq' | 'supporting_article';
   }[];
-  titleMetaRecommendation?: {
-    currentTitle: string;
-    recommendedTitle: string;
-    currentMeta: string;
-    recommendedMeta: string;
-    reason: string;
-  };
 }
 
 export interface RankingsRescueTask {
@@ -60,16 +52,4 @@ export interface RankingsRescueTask {
   };
   rootCause: string;
   prescribedFix: string;
-  copyablePrompt: string;
-}
-
-export interface SearchDemandNode {
-  id: string;
-  name: string;
-  type: 'root' | 'category' | 'query' | 'subquery';
-  impressions: number;
-  clicks: number;
-  position: number;
-  status: 'ranking_page_1' | 'striking_page_2' | 'unexplored_opportunity';
-  children?: SearchDemandNode[];
 }

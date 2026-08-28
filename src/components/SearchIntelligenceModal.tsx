@@ -9,9 +9,6 @@ import {
   LifeBuoy,
   Globe,
   ArrowRight,
-  Copy,
-  Check,
-  CheckCircle,
   Loader2,
   RefreshCw,
   Layers,
@@ -60,13 +57,6 @@ export const SearchIntelligenceModal: React.FC<SearchIntelligenceModalProps> = (
 
   // Content Factory Automation State
   const [factoryMode, setFactoryMode] = useState<'copilot' | 'autopilot' | 'research'>('copilot');
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-
-  const handleCopy = (id: string, text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
-  };
 
   const propertyTarget = selectedProperty || gscSnapshot?.property || '';
 
@@ -299,7 +289,7 @@ export const SearchIntelligenceModal: React.FC<SearchIntelligenceModalProps> = (
             }`}
           >
             <LifeBuoy className="w-4 h-4" />
-            <span>3. Rankings Rescue Automation ({rescueTasks.length})</span>
+            <span>3. Rankings Rescue ({rescueTasks.length})</span>
           </button>
 
           {/* Tab 4: Autonomous SEO Content Factory */}
@@ -312,7 +302,7 @@ export const SearchIntelligenceModal: React.FC<SearchIntelligenceModalProps> = (
             }`}
           >
             <Layers className="w-4 h-4" />
-            <span>4. SEO Opportunity &rarr; Content Factory</span>
+            <span>4. Opportunity Queue</span>
           </button>
         </div>
 
@@ -379,17 +369,17 @@ export const SearchIntelligenceModal: React.FC<SearchIntelligenceModalProps> = (
                   {filteredGaps.map((item, idx) => (
                     <div
                       key={`${item.query}-${idx}`}
-                      className="p-4 bg-white rounded-2xl border border-slate-200 hover:border-blue-300 transition-all shadow-2xs space-y-3"
+                      className="p-4 bg-white rounded-2xl border border-slate-200 hover:border-blue-300 transition-all shadow-2xs space-y-2"
                     >
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                         <div className="space-y-1">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-extrabold text-sm text-slate-900">{item.query}</span>
+                            <span className="font-extrabold text-sm text-slate-900 font-mono">{item.query}</span>
                             <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${item.tierBadgeClass}`}>
                               {item.tierLabel}
                             </span>
                             {item.position > 0 && (
-                              <span className="text-[10px] font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md">
+                              <span className="text-[10px] font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-mono">
                                 Pos #{item.position}
                               </span>
                             )}
@@ -399,7 +389,7 @@ export const SearchIntelligenceModal: React.FC<SearchIntelligenceModalProps> = (
 
                         <div className="flex items-center gap-3 shrink-0">
                           {item.impressions > 0 && (
-                            <div className="text-right">
+                            <div className="text-right font-mono">
                               <div className="text-xs font-black text-slate-900">{item.impressions.toLocaleString()}</div>
                               <div className="text-[10px] text-slate-400 font-bold uppercase">Impressions</div>
                             </div>
@@ -417,21 +407,6 @@ export const SearchIntelligenceModal: React.FC<SearchIntelligenceModalProps> = (
                           </button>
                         </div>
                       </div>
-
-                      {/* Action Recipe Box */}
-                      <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between gap-3 text-xs">
-                        <div className="flex items-center gap-2 text-slate-700 truncate">
-                          <span className="font-bold text-slate-900">Action:</span>
-                          <span className="truncate">{item.actionPromptTemplate}</span>
-                        </div>
-                        <button
-                          onClick={() => handleCopy(`gap-${idx}`, item.actionPromptTemplate)}
-                          className="px-2.5 py-1 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-lg font-bold flex items-center gap-1 shrink-0 cursor-pointer"
-                        >
-                          {copiedId === `gap-${idx}` ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-                          <span>{copiedId === `gap-${idx}` ? 'Copied' : 'Copy Prompt'}</span>
-                        </button>
-                      </div>
                     </div>
                   ))}
                 </div>
@@ -445,10 +420,10 @@ export const SearchIntelligenceModal: React.FC<SearchIntelligenceModalProps> = (
               <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
                 <h4 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
                   <FileText className="w-4 h-4 text-emerald-600" />
-                  &ldquo;What Should This Existing Page Rank For?&rdquo;
+                  Existing Page Query Expansion
                 </h4>
                 <p className="text-xs text-slate-500">
-                  Select an existing ranking URL. GKD expands all queries driving impressions for it and prescribes exact missing H2 sub-sections and FAQs.
+                  Select an existing ranking URL to view related Google autocomplete search demand.
                 </p>
 
                 {gscSnapshot?.pages && gscSnapshot.pages.length > 0 && (
@@ -457,7 +432,7 @@ export const SearchIntelligenceModal: React.FC<SearchIntelligenceModalProps> = (
                     <select
                       value={selectedPageUrl || gscSnapshot.pages[0]?.url}
                       onChange={(e) => setSelectedPageUrl(e.target.value)}
-                      className="p-1.5 px-3 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 cursor-pointer flex-1"
+                      className="p-1.5 px-3 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 cursor-pointer flex-1 font-mono"
                     >
                       {gscSnapshot.pages.map((p) => (
                         <option key={p.url} value={p.url}>
@@ -477,7 +452,7 @@ export const SearchIntelligenceModal: React.FC<SearchIntelligenceModalProps> = (
               ) : expansionPlan ? (
                 <div className="space-y-5">
                   {/* Summary Bar */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono">
                     <div className="p-3 bg-white border border-slate-200 rounded-xl">
                       <div className="text-[11px] text-slate-400 font-bold uppercase">Total Impressions</div>
                       <div className="text-base font-black text-slate-900">{expansionPlan.totalImpressions.toLocaleString()}</div>
@@ -492,36 +467,13 @@ export const SearchIntelligenceModal: React.FC<SearchIntelligenceModalProps> = (
                     </div>
                   </div>
 
-                  {/* Title & Meta Recommendations */}
-                  {expansionPlan.titleMetaRecommendation && (
-                    <div className="p-4 bg-emerald-50/60 border border-emerald-200 rounded-2xl space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-black text-emerald-900 uppercase tracking-wide">
-                          Recommended Title &amp; Snippet Optimization
-                        </span>
-                        <button
-                          onClick={() => handleCopy('title-meta', `Title: ${expansionPlan.titleMetaRecommendation?.recommendedTitle}\nMeta: ${expansionPlan.titleMetaRecommendation?.recommendedMeta}`)}
-                          className="px-2.5 py-1 bg-white border border-emerald-300 text-emerald-800 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer"
-                        >
-                          {copiedId === 'title-meta' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-                          <span>{copiedId === 'title-meta' ? 'Copied' : 'Copy'}</span>
-                        </button>
-                      </div>
-                      <div className="space-y-1 text-xs">
-                        <p className="text-slate-800"><strong>New Title:</strong> {expansionPlan.titleMetaRecommendation.recommendedTitle}</p>
-                        <p className="text-slate-700"><strong>New Meta:</strong> {expansionPlan.titleMetaRecommendation.recommendedMeta}</p>
-                        <p className="text-[11px] text-emerald-800 italic">{expansionPlan.titleMetaRecommendation.reason}</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Missing Subtopics to Add to this Page */}
+                  {/* Subtopics */}
                   <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-4">
                     <h5 className="text-xs font-black text-slate-900 uppercase tracking-wider">
-                      Prescribed Sections &amp; FAQs to Add to this Existing Page
+                      Related Google Autocomplete Queries
                     </h5>
 
-                    <div className="divide-y divide-slate-100">
+                    <div className="divide-y divide-slate-100 font-mono">
                       {expansionPlan.missingSubtopics.map((sub, idx) => (
                         <div key={idx} className="py-3 flex items-center justify-between gap-3">
                           <div className="space-y-0.5">
@@ -530,18 +482,21 @@ export const SearchIntelligenceModal: React.FC<SearchIntelligenceModalProps> = (
                               <span className={`text-[9px] font-black uppercase px-1.5 py-0.2 rounded ${
                                 sub.type === 'faq' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
                               }`}>
-                                {sub.type === 'faq' ? 'FAQ Section' : 'H2 Sub-Section'}
+                                {sub.type === 'faq' ? 'Question' : 'Subtopic'}
                               </span>
                             </div>
-                            <p className="text-[11px] text-slate-500">Query Target: &ldquo;{sub.targetQuery}&rdquo; &bull; Demand Score: {sub.relevanceScore}/100</p>
+                            <p className="text-[11px] text-slate-500">Popularity Score: {sub.relevanceScore}/100</p>
                           </div>
 
                           <button
-                            onClick={() => handleCopy(`sub-${idx}`, `## ${sub.suggestedHeading}\n\nWrite a 200-word authoritative section for our page on "${expansionPlan.pageUrl}" covering "${sub.targetQuery}".`)}
+                            onClick={() => {
+                              onExpandQueryInGkd(sub.targetQuery);
+                              onClose();
+                            }}
                             className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer shrink-0"
                           >
-                            {copiedId === `sub-${idx}` ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-                            <span>{copiedId === `sub-${idx}` ? 'Copied' : 'Draft Prompt'}</span>
+                            <span>Explore</span>
+                            <ArrowRight className="w-3 h-3" />
                           </button>
                         </div>
                       ))}
@@ -558,10 +513,10 @@ export const SearchIntelligenceModal: React.FC<SearchIntelligenceModalProps> = (
               <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-1">
                 <h4 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
                   <LifeBuoy className="w-4 h-4 text-amber-600" />
-                  Automated Rankings Rescue Protocol
+                  Rankings Rescue Query Analysis
                 </h4>
                 <p className="text-xs text-slate-500">
-                  Isolates pages losing ground or stuck on Page 2 (Positions 11–20) and prescribes exact fixes.
+                  Isolates queries stuck on Page 2 (Positions 11–20) or suffering from low CTR.
                 </p>
               </div>
 
@@ -575,12 +530,12 @@ export const SearchIntelligenceModal: React.FC<SearchIntelligenceModalProps> = (
                   {rescueTasks.map((task) => (
                     <div
                       key={task.id}
-                      className="p-4 bg-white rounded-2xl border border-slate-200 hover:border-amber-300 transition-all shadow-2xs space-y-3"
+                      className="p-4 bg-white rounded-2xl border border-slate-200 hover:border-amber-300 transition-all shadow-2xs space-y-2"
                     >
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                         <div className="space-y-1">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-extrabold text-sm text-slate-900">{task.title}</span>
+                            <span className="font-extrabold text-sm text-slate-900 font-mono">{task.title}</span>
                             <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
                               task.severity === 'high' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
                             }`}>
@@ -590,24 +545,10 @@ export const SearchIntelligenceModal: React.FC<SearchIntelligenceModalProps> = (
                           <p className="text-xs text-slate-600">{task.rootCause}</p>
                         </div>
 
-                        <div className="text-right shrink-0">
+                        <div className="text-right shrink-0 font-mono">
                           <div className="text-xs font-black text-slate-900">{task.impactMetrics.impressions.toLocaleString()} imp</div>
                           <div className="text-[10px] text-slate-400 font-bold">Pos #{task.impactMetrics.position}</div>
                         </div>
-                      </div>
-
-                      <div className="p-3 bg-amber-50/60 border border-amber-200/80 rounded-xl space-y-2 text-xs">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-bold text-amber-950">Prescribed SEO Fix:</span>
-                          <button
-                            onClick={() => handleCopy(task.id, task.copyablePrompt)}
-                            className="px-2.5 py-1 bg-white border border-amber-300 text-amber-900 rounded-lg font-bold flex items-center gap-1 cursor-pointer"
-                          >
-                            {copiedId === task.id ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-                            <span>{copiedId === task.id ? 'Copied Prompt' : 'Copy 1-Click Fix'}</span>
-                          </button>
-                        </div>
-                        <p className="text-slate-700">{task.prescribedFix}</p>
                       </div>
                     </div>
                   ))}
@@ -624,10 +565,10 @@ export const SearchIntelligenceModal: React.FC<SearchIntelligenceModalProps> = (
                   <div>
                     <h4 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
                       <Layers className="w-5 h-5 text-purple-600" />
-                      Autonomous SEO Opportunity &rarr; Content Factory
+                      Prioritized Opportunity Queue
                     </h4>
                     <p className="text-xs text-slate-500">
-                      Closed-loop engine: First-Party GSC &rarr; Autocomplete Expansion &rarr; Opportunity Scoring &rarr; Execution.
+                      Top search opportunities prioritized by real Google impressions and autocomplete demand.
                     </p>
                   </div>
 
@@ -639,7 +580,7 @@ export const SearchIntelligenceModal: React.FC<SearchIntelligenceModalProps> = (
                         factoryMode === 'copilot' ? 'bg-white text-purple-700 shadow-xs' : 'text-slate-600'
                       }`}
                     >
-                      Copilot (Review First)
+                      Copilot
                     </button>
                     <button
                       onClick={() => setFactoryMode('autopilot')}
@@ -655,42 +596,32 @@ export const SearchIntelligenceModal: React.FC<SearchIntelligenceModalProps> = (
                         factoryMode === 'research' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600'
                       }`}
                     >
-                      Research Only
+                      Research
                     </button>
                   </div>
-                </div>
-
-                {/* Closed Loop Visual Workflow */}
-                <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 pt-2 text-center text-[10px] font-bold">
-                  <div className="p-2 bg-blue-50 text-blue-800 rounded-lg border border-blue-200">1. GSC Ingestion</div>
-                  <div className="p-2 bg-indigo-50 text-indigo-800 rounded-lg border border-indigo-200">2. Autocomplete</div>
-                  <div className="p-2 bg-purple-50 text-purple-800 rounded-lg border border-purple-200">3. Scoring Model</div>
-                  <div className="p-2 bg-emerald-50 text-emerald-800 rounded-lg border border-emerald-200">4. Brief / Content</div>
-                  <div className="p-2 bg-amber-50 text-amber-800 rounded-lg border border-amber-200">5. Publish &amp; Verify</div>
-                  <div className="p-2 bg-sky-50 text-sky-800 rounded-lg border border-sky-200">6. Closed GSC Loop</div>
                 </div>
               </div>
 
               {/* High-Score Opportunity Queue */}
               <div className="space-y-3">
                 <h5 className="text-xs font-black text-slate-900 uppercase tracking-wider">
-                  Prioritized Opportunities in Factory Queue ({gapOpportunities.slice(0, 5).length})
+                  Prioritized Search Queries ({gapOpportunities.slice(0, 5).length})
                 </h5>
 
                 {gapOpportunities.slice(0, 5).map((op, idx) => (
                   <div
                     key={idx}
-                    className="p-4 bg-white rounded-2xl border border-slate-200 hover:border-purple-300 transition-all shadow-2xs space-y-3"
+                    className="p-4 bg-white rounded-2xl border border-slate-200 hover:border-purple-300 transition-all shadow-2xs space-y-2"
                   >
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
-                          <span className="font-black text-sm text-slate-900">{op.query}</span>
+                          <span className="font-black text-sm text-slate-900 font-mono">{op.query}</span>
                           <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${op.tierBadgeClass}`}>
                             {op.recommendedAction}
                           </span>
                         </div>
-                        <p className="text-xs text-slate-500">Source Seed: &ldquo;{op.sourceGscQuery}&rdquo; &bull; Demand Score: {op.autocompleteScore}/100</p>
+                        <p className="text-xs text-slate-500 font-mono">Source Seed: &ldquo;{op.sourceGscQuery}&rdquo; &bull; Demand Score: {op.autocompleteScore}/100</p>
                       </div>
 
                       <div className="flex items-center gap-2">
@@ -701,7 +632,7 @@ export const SearchIntelligenceModal: React.FC<SearchIntelligenceModalProps> = (
                           }}
                           className="px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer"
                         >
-                          <span>Generate SEO Brief</span>
+                          <span>Explore in GKD</span>
                           <ChevronRight className="w-3.5 h-3.5" />
                         </button>
                       </div>
@@ -716,8 +647,7 @@ export const SearchIntelligenceModal: React.FC<SearchIntelligenceModalProps> = (
         {/* Modal Footer */}
         <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
           <span className="flex items-center gap-1.5">
-            <CheckCircle className="w-4 h-4 text-emerald-600" />
-            <span>Real GSC First-Party Data + Authentic Search Autocomplete</span>
+            <span>100% Real Google Search Console &amp; Authentic Autocomplete Data</span>
           </span>
           <button
             onClick={onClose}

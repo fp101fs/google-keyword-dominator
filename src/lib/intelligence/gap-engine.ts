@@ -14,12 +14,10 @@ function extractTopicFromUrl(url: string): string | null {
       .replace(/[-_]/g, ' ')
       .trim();
 
-    // Filter out generic paths
     if (!clean || clean.length < 3 || clean === 'dashboard' || clean === 'login' || clean === 'index') {
       return null;
     }
 
-    // Strip numbers or stop words like 'best' or '2026' from the seed to get the root topic
     const topic = clean
       .replace(/\b(best|top|202[0-9]|guide|review|how to)\b/gi, '')
       .replace(/\s+/g, ' ')
@@ -44,7 +42,6 @@ function isRelevantQueryExpansion(seed: string, suggestion: string): boolean {
   const sugTokens = normSug.split(/\s+/).filter(Boolean);
 
   if (seedTokens.length > 1) {
-    // If seed has multiple words, at least 60% of tokens must be present
     const matchCount = seedTokens.filter((token) => normSug.includes(token)).length;
     return matchCount >= Math.ceil(seedTokens.length * 0.6);
   }
@@ -63,10 +60,7 @@ function isRelevantQueryExpansion(seed: string, suggestion: string): boolean {
 }
 
 /**
- * Computes GSC Gap Opportunities:
- * For mature sites: Expands non-branded search queries from GSC.
- * For new sites: Automatically parses content topics and URL slugs (e.g. "audio to video", "video generator")
- * so you discover genuine industry demand rather than empty brand-name typos.
+ * Computes GSC Gap Opportunities purely with real Google search data.
  */
 export async function computeGscGapOpportunities(
   gscQueries: GscQueryItem[],
@@ -87,25 +81,21 @@ export async function computeGscGapOpportunities(
         tier: 'red_low_ctr',
         tierLabel: 'High Impressions + Low CTR',
         tierBadgeClass: 'bg-rose-100 text-rose-800 border-rose-300',
-        tierDescription: `Ranking #${q.position} with ${q.impressions.toLocaleString()} impressions, but only ${(q.ctr * 100).toFixed(1)}% CTR. Needs compelling Title & Meta CTA rewrite.`,
+        tierDescription: `Ranking #${q.position} with ${q.impressions.toLocaleString()} impressions and ${(q.ctr * 100).toFixed(1)}% CTR.`,
         impressions: q.impressions,
         clicks: q.clicks,
         position: q.position,
         ctr: q.ctr,
         page: q.page,
         autocompleteScore: 90,
-        recommendedAction: 'Rewrite Title / Meta',
-        actionPromptTemplate: `Rewrite the <title> tag and <meta name="description"> for "${q.page || 'this page'}" to target the primary query "${q.query}". Make it click-worthy with strong intent match to increase organic CTR from ${(q.ctr * 100).toFixed(1)}%.`,
+        recommendedAction: 'Optimize CTR',
       });
     }
   });
 
   // 2. Build intelligent seed list:
-  // - Top non-branded GSC queries (queries with >= 2 words)
-  // - URL topic slugs from published pages (crucial for new sites)
   const candidateSeeds = new Set<string>();
 
-  // Extract from existing queries
   gscQueries.forEach((q) => {
     const trimmed = q.query.trim();
     if (trimmed.includes(' ') || q.impressions >= 100) {
@@ -113,7 +103,6 @@ export async function computeGscGapOpportunities(
     }
   });
 
-  // Extract from published page URLs (e.g. "/best-ai-audio-to-video-tools" -> "ai audio to video tools")
   gscPages.forEach((p) => {
     const slugTopic = extractTopicFromUrl(p.url);
     if (slugTopic) {
@@ -121,7 +110,6 @@ export async function computeGscGapOpportunities(
     }
   });
 
-  // Fallback: If no seeds yet, take the first 3 available queries
   if (candidateSeeds.size === 0 && gscQueries.length > 0) {
     gscQueries.slice(0, 3).forEach((q) => candidateSeeds.add(q.query));
   }
@@ -157,15 +145,14 @@ export async function computeGscGapOpportunities(
               tier: 'green_striking',
               tierLabel: 'Striking Distance (Pos 8-25)',
               tierBadgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300',
-              tierDescription: `Already ranking #${existingGsc.position} with ${existingGsc.impressions.toLocaleString()} impressions. Add dedicated H2 section to jump to Page 1.`,
+              tierDescription: `Already ranking #${existingGsc.position} with ${existingGsc.impressions.toLocaleString()} impressions.`,
               impressions: existingGsc.impressions,
               clicks: existingGsc.clicks,
               position: existingGsc.position,
               ctr: existingGsc.ctr,
               page: existingGsc.page,
               autocompleteScore: item.relativeScore,
-              recommendedAction: item.intent === 'informational' ? 'Add FAQ Schema' : 'Add H2 / Missing Section',
-              actionPromptTemplate: `Add a dedicated H2 section or FAQ answer targeting "${item.keyword}" on the page "${existingGsc.page || 'this page'}". The query already ranks #${existingGsc.position} on Google.`,
+              recommendedAction: 'Page 1 Target',
             });
           } else if (existingGsc.impressions >= 100) {
             opportunities.push({
@@ -174,15 +161,14 @@ export async function computeGscGapOpportunities(
               tier: 'green_impressions',
               tierLabel: 'Google Associated Topic',
               tierBadgeClass: 'bg-teal-100 text-teal-800 border-teal-300',
-              tierDescription: `Google already associates your site with this topic (${existingGsc.impressions.toLocaleString()} impressions at Pos #${existingGsc.position}).`,
+              tierDescription: `Google associates this query with your domain (${existingGsc.impressions.toLocaleString()} impressions).`,
               impressions: existingGsc.impressions,
               clicks: existingGsc.clicks,
               position: existingGsc.position,
               ctr: existingGsc.ctr,
               page: existingGsc.page,
               autocompleteScore: item.relativeScore,
-              recommendedAction: 'Add H2 / Missing Section',
-              actionPromptTemplate: `Expand the topic "${item.keyword}" on "${existingGsc.page || 'this page'}" to reinforce Google's topical relevance.`,
+              recommendedAction: 'Reinforce Topic',
             });
           }
         } else {
@@ -194,14 +180,13 @@ export async function computeGscGapOpportunities(
               tier: 'yellow_new_content',
               tierLabel: 'High Demand • Zero GSC Coverage',
               tierBadgeClass: 'bg-amber-100 text-amber-900 border-amber-300',
-              tierDescription: `High search demand around topical sub-cluster "${item.seedKeyword}" that your site has 0 impressions for. Great opportunity for a new article.`,
+              tierDescription: `High autocomplete search demand with 0 impressions on your site.`,
               impressions: 0,
               clicks: 0,
               position: 0,
               ctr: 0,
               autocompleteScore: item.relativeScore,
-              recommendedAction: 'Create New Article',
-              actionPromptTemplate: `Create a comprehensive new article targeting "${item.keyword}" as a supporting cluster page linking back to your main topic hub.`,
+              recommendedAction: 'New Content Target',
             });
           }
         }
@@ -211,7 +196,6 @@ export async function computeGscGapOpportunities(
     }
   }
 
-  // Deduplicate and sort by priority score
   const seen = new Set<string>();
   const uniqueList = opportunities.filter((op) => {
     if (seen.has(op.query.toLowerCase())) return false;

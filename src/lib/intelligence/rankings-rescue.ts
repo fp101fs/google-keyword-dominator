@@ -6,7 +6,6 @@ import { RankingsRescueTask } from './types';
  * Analyzes GSC performance data to detect:
  * 1. Striking Distance queries (Pos 11-20 with high impressions)
  * 2. High Impressions with low CTR (SERP snippet failure)
- * 3. Priority optimization tasks with 1-click prompts
  */
 export function computeRankingsRescueTasks(
   gscQueries: GscQueryItem[]
@@ -20,8 +19,8 @@ export function computeRankingsRescueTasks(
         id: `rescue-ctr-${idx}`,
         type: 'low_ctr',
         severity: 'high',
-        title: `Low CTR on Top-10 Query: "${q.query}"`,
-        url: q.page || 'Target Page',
+        title: `Low CTR on Top 10 Query: "${q.query}"`,
+        url: q.page || '',
         query: q.query,
         impactMetrics: {
           impressions: q.impressions,
@@ -29,9 +28,8 @@ export function computeRankingsRescueTasks(
           position: q.position,
           ctr: q.ctr,
         },
-        rootCause: `Ranking #${q.position} with ${q.impressions.toLocaleString()} impressions, but only generating ${(q.ctr * 100).toFixed(1)}% CTR. Your title/snippet is losing clicks to competitors.`,
-        prescribedFix: `Rewrite the HTML <title> tag to front-load the keyword "${q.query}", and add emotional hooks or current year (2026).`,
-        copyablePrompt: `Provide 5 high-CTR Title Tag and Meta Description variations for the URL "${q.page || 'this page'}". The primary keyword is "${q.query}", currently ranking at Position #${q.position} with ${q.impressions.toLocaleString()} impressions and ${(q.ctr * 100).toFixed(1)}% CTR.`,
+        rootCause: `Ranking #${q.position} with ${q.impressions.toLocaleString()} impressions and ${(q.ctr * 100).toFixed(1)}% CTR.`,
+        prescribedFix: `Optimize page title and snippet to match user intent for "${q.query}".`,
       });
     }
 
@@ -41,8 +39,8 @@ export function computeRankingsRescueTasks(
         id: `rescue-pos-${idx}`,
         type: 'striking_distance',
         severity: q.impressions > 1500 ? 'high' : 'medium',
-        title: `Page 2 Striking Opportunity: "${q.query}"`,
-        url: q.page || 'Target Page',
+        title: `Page 2 Striking Distance: "${q.query}"`,
+        url: q.page || '',
         query: q.query,
         impactMetrics: {
           impressions: q.impressions,
@@ -50,9 +48,8 @@ export function computeRankingsRescueTasks(
           position: q.position,
           ctr: q.ctr,
         },
-        rootCause: `Google already trusts your page for "${q.query}" at Position #${q.position}. It is on Page 2 and missing out on 90% of clicks.`,
-        prescribedFix: `Add a dedicated H2 heading and 2-3 substantive paragraphs with bullet points answering "${q.query}".`,
-        copyablePrompt: `Write a comprehensive, authoritative section (H2 + 250 words with actionable steps) to insert into "${q.page || 'this article'}" specifically targeting the query "${q.query}" to push the ranking from Position #${q.position} onto Page 1.`,
+        rootCause: `Ranking on Page 2 at Position #${q.position} with ${q.impressions.toLocaleString()} impressions.`,
+        prescribedFix: `Add comprehensive content covering "${q.query}" to move onto Page 1.`,
       });
     }
   });
