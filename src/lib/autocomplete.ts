@@ -88,7 +88,6 @@ export async function fetchGoogleSuggestions(options: AutocompleteOptions): Prom
       return suggestions;
     }
 
-    // Format for client=firefox is: [query, [sugg1, sugg2, ...]]
     return [];
   } catch (err: unknown) {
     if (err instanceof Error && err.name === 'AbortError') {
@@ -101,11 +100,11 @@ export async function fetchGoogleSuggestions(options: AutocompleteOptions): Prom
 }
 
 /**
- * Expand options for keyword discovery:
- * - normal: root seed only
- * - alphabet: queries root + ' ' + a..z (or prefix a..z + ' ' + root)
- * - wildcard: queries with * inserted or replaced
- * - questions: queries with 'who', 'what', 'where', 'when', 'why', 'how', 'can', 'are', 'is', 'best', 'vs'
+ * Expansion modes:
+ * - normal (deep mode default): root seed + top letters/questions/prepositions to guarantee 100+ genuine suggestions
+ * - alphabet: full exhaustive a-z, 0-9
+ * - questions: exhaustive question modifiers
+ * - prepositions: exhaustive prepositions
  */
 export interface BatchKeywordRequest {
   seed: string;
@@ -114,12 +113,14 @@ export interface BatchKeywordRequest {
   includeAlphabet?: boolean;
   includeQuestions?: boolean;
   includePrepositions?: boolean;
+  maxResults?: number;
 }
 
 const ALPHABET = 'abcdefghijklmnopqrstuvwxyz'.split('');
 const NUMBERS = '0123456789'.split('');
+const TOP_EXPANSIONS = ['a', 'b', 'c', 'd', 'e', 'f', 's', 'm', 'p', 't', 'for', 'with', 'how', 'best', 'vs', 'online', 'app', 'free', 'near me'];
 const QUESTION_PREFIXES = ['how', 'what', 'why', 'where', 'who', 'when', 'can', 'which', 'is', 'are', 'best', 'top', 'vs'];
-const PREPOSITIONS = ['for', 'with', 'without', 'to', 'in', 'near', 'on', 'like'];
+const PREPOSITIONS = ['for', 'with', 'without', 'to', 'in', 'near', 'on', 'like', 'under', 'vs'];
 
 /**
  * Retrieves genuine keyword suggestions with controlled concurrency and deduplication.
@@ -134,18 +135,13 @@ export async function getExpandedKeywords(
     return { keywords: [], totalQueriesExecuted: 0 };
   }
 
-  // Construct legitimate query variants
+  // Construct legitimate subqueries
   const subqueries: { query: string; source: string }[] = [];
 
   // 1. Root query
   subqueries.push({ query: seed, source: 'seed' });
 
-  // 2. Wildcard if seed contains '*' or if user asked for variations
-  if (seed.includes('*')) {
-    // Already a wildcard query
-  }
-
-  // 3. Alphabet expansion if requested
+  // 2. If user enabled specific expansion toggles, do full expansions
   if (req.includeAlphabet) {
     for (const char of ALPHABET) {
       subqueries.push({ query: `${seed} ${char}`, source: `suffix-${char}` });
@@ -155,22 +151,30 @@ export async function getExpandedKeywords(
     }
   }
 
-  // 4. Question expansion if requested
   if (req.includeQuestions) {
     for (const q of QUESTION_PREFIXES) {
       subqueries.push({ query: `${q} ${seed}`, source: `question-${q}` });
     }
   }
 
-  // 5. Prepositions if requested
   if (req.includePrepositions) {
     for (const prep of PREPOSITIONS) {
       subqueries.push({ query: `${seed} ${prep}`, source: `prep-${prep}` });
     }
   }
 
-  // Execute subqueries with concurrency limiter (batch size 4 to be respectful and prevent timeouts)
-  const CONCURRENCY = 4;
+  // 3. Default deep discovery: If no specific option is toggled, query top letters & modifiers to return 100+ real keywords
+  if (!req.includeAlphabet && !req.includeQuestions && !req.includePrepositions) {
+    for (const char of ALPHABET) {
+      subqueries.push({ query: `${seed} ${char}`, source: `alpha-${char}` });
+    }
+    for (const q of ['how to', 'best', 'for', 'with', 'vs']) {
+      subqueries.push({ query: `${q} ${seed}`, source: `mod-${q}` });
+    }
+  }
+
+  // Execute subqueries with concurrency limiter (batch size 6)
+  const CONCURRENCY = 6;
   const resultMap = new Map<string, { keyword: string; sources: Set<string>; minRank: number; occurrences: number }>();
   let completed = 0;
   const total = subqueries.length;
@@ -216,13 +220,11 @@ export async function getExpandedKeywords(
 
     // Small delay between batches to respect rate limits
     if (i + CONCURRENCY < subqueries.length) {
-      await new Promise((r) => setTimeout(r, 80));
+      await new Promise((r) => setTimeout(r, 60));
     }
   }
 
   // Calculate relative scores based ONLY on actual returned data
-  // Max occurrences possible = total subqueries
-  // Rank ranges from 0 (top suggestion) to ~15
   const maxOccurrences = Math.max(1, ...Array.from(resultMap.values()).map((v) => v.occurrences));
   
   const keywords: KeywordItem[] = Array.from(resultMap.values()).map((entry) => {
@@ -232,7 +234,7 @@ export async function getExpandedKeywords(
 
     // Mathematical Relative Score Formula (0-100 scale):
     // - Occurrences across subqueries: 60%
-    // - Suggestion position rank (rank 0 = higher relevance): 40%
+    // - Suggestion position rank (rank 0 = top relevance): 40%
     const occurrenceFactor = (entry.occurrences / maxOccurrences) * 60;
     const rankFactor = Math.max(0, (15 - entry.minRank) / 15) * 40;
     const relativeScore = Math.round(occurrenceFactor + rankFactor);
