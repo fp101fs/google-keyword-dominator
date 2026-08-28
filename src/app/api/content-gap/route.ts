@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getExpandedKeywords, normalizeKeyword, KeywordItem } from '@/lib/autocomplete';
 import { computeContentGap } from '@/lib/content-gap';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { synthesizeCompetitorGapWithLlm } from '@/lib/llm';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -20,7 +21,7 @@ export async function POST(req: NextRequest) {
     const cleanCompetitors = (competitorSeeds || [])
       .map(normalizeKeyword)
       .filter(Boolean)
-      .slice(0, 3); // limit up to 3 competitors
+      .slice(0, 3);
 
     if (!cleanTarget || cleanCompetitors.length === 0) {
       return NextResponse.json(
@@ -62,20 +63,25 @@ export async function POST(req: NextRequest) {
       })
     );
 
-    // 3. Compute Gap
-    const gapResult = computeContentGap(
+    // 3. Compute Gap Matrix
+    const gapAnalysis = computeContentGap(
       cleanTarget,
       targetResults.keywords,
       cleanCompetitors,
       competitorMap
     );
 
+    // 4. Call genuine LLM via web_search to synthesize competitor strategy & differentiation
+    const gapKeywords = gapAnalysis.gapOpportunities.map((k) => k.keyword);
+    const llmStrategy = await synthesizeCompetitorGapWithLlm(cleanTarget, cleanCompetitors, gapKeywords);
+
     return NextResponse.json({
       success: true,
-      data: gapResult,
+      data: gapAnalysis,
+      llmStrategy,
     });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Failed to analyze Content Gap';
+    const message = error instanceof Error ? error.message : 'Failed to analyze content gap';
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -2,7 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { Zap, Search, Target, Grid, FileText, TrendingUp, Globe, Sparkles, BookOpen } from 'lucide-react';
+import { Zap, Search, Target, Grid, FileText, Globe, Sparkles, BookOpen } from 'lucide-react';
 import { GscConnectedSnapshot } from '@/lib/gsc/types';
 
 export type MainNavTab = 'explorer' | 'content-gap' | 'serp-matrix' | 'content-brief' | 'gsc-striking' | 'intelligence';
@@ -27,151 +27,125 @@ export const Navbar: React.FC<NavbarProps> = ({
   gscSnapshot,
 }) => {
   return (
-    <header className="border-b border-slate-200/80 bg-white/95 backdrop-blur-md sticky top-0 z-50 shadow-2xs">
+    <header className="border-b border-slate-200 bg-white/95 backdrop-blur-md sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="h-16 flex items-center justify-between gap-4">
-          {/* Logo & Branding */}
+        <div className="h-14 sm:h-16 flex items-center justify-between gap-3">
+          {/* Clean Minimalist Logo */}
           <div
             onClick={() => onSelectTab('explorer')}
-            className="flex items-center gap-3 cursor-pointer select-none shrink-0"
+            className="flex items-center gap-2.5 cursor-pointer select-none shrink-0"
           >
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-rose-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
-              <Zap className="w-5 h-5" />
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-slate-900 flex items-center justify-center text-white shadow-xs">
+              <Zap className="w-4 h-4 text-blue-400" />
             </div>
-            <div>
-              <span className="font-black text-lg text-slate-900 tracking-tight flex items-center gap-1.5">
-                Keyword Dominator <span className="text-[10px] uppercase tracking-wider bg-blue-100 text-blue-800 font-extrabold px-2 py-0.5 rounded-full">Ahrefs Pro</span>
+            <div className="flex items-center gap-2">
+              <span className="font-extrabold text-base sm:text-lg text-slate-900 tracking-tight">
+                Keyword Dominator
               </span>
-              <p className="text-[11px] text-slate-500 font-medium hidden sm:block">
-                Autocomplete &amp; Competitor Intelligence Suite
-              </p>
             </div>
           </div>
 
-          {/* Primary Navigation Tabs */}
-          <nav className="hidden lg:flex items-center gap-1 p-1 bg-slate-100/80 rounded-xl border border-slate-200/80">
-            {/* 1. Keyword Explorer */}
+          {/* Decluttered Sleek Navigation */}
+          <nav className="hidden md:flex items-center gap-1">
             <button
               onClick={() => onSelectTab('explorer')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 activeTab === 'explorer'
-                  ? 'bg-white text-slate-900 shadow-xs border border-slate-200/60'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                  ? 'bg-slate-100 text-slate-900'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
               }`}
             >
-              <Search className="w-3.5 h-3.5 text-blue-600" />
-              <span>Keywords</span>
+              <span className="flex items-center gap-1.5">
+                <Search className="w-3.5 h-3.5 text-blue-600" />
+                <span>Explorer</span>
+              </span>
             </button>
 
-            {/* 2. Autonomous Search Intelligence */}
             <button
               onClick={() => {
                 onSelectTab('intelligence');
                 onOpenIntelligenceModal();
               }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 activeTab === 'intelligence'
-                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-xs'
-                  : 'text-blue-700 bg-blue-50/70 hover:bg-blue-100 hover:text-blue-900'
+                  ? 'bg-blue-50 text-blue-700'
+                  : 'text-slate-600 hover:text-blue-600 hover:bg-slate-50'
               }`}
             >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Search Intelligence</span>
-              <span className="text-[9px] bg-white/20 text-white px-1.5 py-0.2 rounded-full font-mono">
-                AI Suite
+              <span className="flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                <span>Search Intelligence</span>
               </span>
             </button>
 
-            {/* 3. GSC Striking Distance Opportunities */}
-            <button
-              onClick={() => {
-                onSelectTab('gsc-striking');
-                onOpenGscModal();
-              }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                activeTab === 'gsc-striking'
-                  ? 'bg-white text-emerald-800 shadow-xs border border-emerald-300'
-                  : 'text-slate-600 hover:text-emerald-700 hover:bg-white/60'
-              }`}
-            >
-              <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Striking Pos 11-25</span>
-            </button>
-
-            {/* 4. Ahrefs Content Gap */}
             <button
               onClick={() => {
                 onSelectTab('content-gap');
                 onOpenContentGap();
               }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 activeTab === 'content-gap'
-                  ? 'bg-white text-rose-700 shadow-xs border border-rose-200'
-                  : 'text-slate-600 hover:text-rose-600 hover:bg-white/60'
+                  ? 'bg-rose-50 text-rose-700'
+                  : 'text-slate-600 hover:text-rose-600 hover:bg-slate-50'
               }`}
             >
-              <Target className="w-3.5 h-3.5 text-rose-600" />
-              <span>Content Gap</span>
+              <span className="flex items-center gap-1.5">
+                <Target className="w-3.5 h-3.5 text-rose-600" />
+                <span>Content Gap</span>
+              </span>
             </button>
 
-            {/* 5. SERP Overlap Matrix */}
             <button
               onClick={() => onSelectTab('serp-matrix')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 activeTab === 'serp-matrix'
-                  ? 'bg-white text-amber-800 shadow-xs border border-amber-200'
-                  : 'text-slate-600 hover:text-amber-600 hover:bg-white/60'
+                  ? 'bg-amber-50 text-amber-800'
+                  : 'text-slate-600 hover:text-amber-700 hover:bg-slate-50'
               }`}
             >
-              <Grid className="w-3.5 h-3.5 text-amber-600" />
-              <span>SERP Matrix</span>
+              <span className="flex items-center gap-1.5">
+                <Grid className="w-3.5 h-3.5 text-amber-600" />
+                <span>SERP Matrix</span>
+              </span>
             </button>
 
-            {/* 6. Content Brief Generator */}
             <button
               onClick={() => {
                 onSelectTab('content-brief');
                 onOpenContentBrief();
               }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 activeTab === 'content-brief'
-                  ? 'bg-white text-indigo-700 shadow-xs border border-indigo-200'
-                  : 'text-slate-600 hover:text-indigo-600 hover:bg-white/60'
+                  ? 'bg-indigo-50 text-indigo-700'
+                  : 'text-slate-600 hover:text-indigo-600 hover:bg-slate-50'
               }`}
             >
-              <FileText className="w-3.5 h-3.5 text-indigo-600" />
-              <span>Briefs</span>
+              <span className="flex items-center gap-1.5">
+                <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Briefs</span>
+              </span>
             </button>
 
-            {/* 7. Dedicated User Guide */}
             <Link
               href="/guide"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-white/60 transition-all"
+              className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-all flex items-center gap-1.5"
             >
-              <BookOpen className="w-3.5 h-3.5 text-slate-500" />
+              <BookOpen className="w-3.5 h-3.5 text-slate-400" />
               <span>Guide</span>
             </Link>
           </nav>
 
-          {/* Right Action: GSC Status Pill */}
+          {/* Right Action: Clean GSC Status */}
           <div className="flex items-center gap-2">
             <button
-              onClick={onOpenIntelligenceModal}
-              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-md shadow-blue-500/20 cursor-pointer"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>AI Intelligence Hub</span>
-            </button>
-
-            <button
               onClick={onOpenGscModal}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs border ${
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
                 gscSnapshot
-                  ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200'
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
+                  : 'bg-slate-900 hover:bg-slate-800 text-white border-slate-900 shadow-xs'
               }`}
             >
-              <Globe className="w-3.5 h-3.5 text-emerald-600" />
+              <Globe className={`w-3.5 h-3.5 ${gscSnapshot ? 'text-emerald-600' : 'text-slate-300'}`} />
               <span>{gscSnapshot ? gscSnapshot.property : 'Connect GSC'}</span>
             </button>
           </div>

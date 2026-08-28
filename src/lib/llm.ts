@@ -31,6 +31,20 @@ export interface LlmGapActionResponse {
   actionDescription: string;
 }
 
+export interface LlmPageAuditResponse {
+  score: number;
+  criticalIssues: string[];
+  recommendedImprovements: string[];
+  missingSubtopics: string[];
+  intentAlignment: string;
+}
+
+export interface LlmCompetitorGapResponse {
+  topCompetitorAngles: string[];
+  highOpportunitySubtopics: string[];
+  differentiationStrategy: string;
+}
+
 async function callOpenRouterWithSearch(prompt: string, systemPrompt: string = 'You are an expert SEO strategist. Always output pure valid JSON without markdown wrapping.'): Promise<string | null> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
@@ -76,7 +90,6 @@ async function callOpenRouterWithSearch(prompt: string, systemPrompt: string = '
     const content = data.choices?.[0]?.message?.content?.trim();
     if (!content) return null;
 
-    // Clean any backticks or markdown preamble if returned
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       return jsonMatch[0];
@@ -84,6 +97,57 @@ async function callOpenRouterWithSearch(prompt: string, systemPrompt: string = '
     return content.replace(/^```json\s*/i, '').replace(/\s*```$/i, '').trim();
   } catch (err) {
     console.error('OpenRouter fetch exception:', err);
+    return null;
+  }
+}
+
+async function callOpenRouterWithWebFetch(url: string, prompt: string): Promise<string | null> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) return null;
+
+  try {
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://google-keyword-dominator.vercel.app',
+        'X-Title': 'Google Keyword Dominator',
+      },
+      body: JSON.stringify({
+        model: OPENROUTER_MODEL,
+        tools: [
+          {
+            type: 'openrouter:web_fetch',
+            parameters: {
+              engine: 'auto',
+              max_uses: 2,
+            },
+          },
+        ],
+        messages: [
+          {
+            role: 'system',
+            content: 'You are an elite SEO auditor. Use web_fetch to read the URL and analyze its on-page optimization. Output pure valid JSON.',
+          },
+          {
+            role: 'user',
+            content: `Use web_fetch to read "${url}".\n${prompt}`,
+          },
+        ],
+        temperature: 0.2,
+      }),
+    });
+
+    if (!res.ok) return null;
+    const data = await res.json();
+    const content = data.choices?.[0]?.message?.content?.trim();
+    if (!content) return null;
+
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    return jsonMatch ? jsonMatch[0] : content.replace(/^```json\s*/i, '').replace(/\s*```$/i, '').trim();
+  } catch (err) {
+    console.error('Error in web_fetch LLM call:', err);
     return null;
   }
 }
@@ -132,7 +196,68 @@ Return ONLY valid JSON matching this exact structure:
 }
 
 /**
- * 2. Page Expansion Title & Meta Description Generator via LLM
+ * 2. Page Grader: Live URL Fetch & Intelligent SEO Audit via web_fetch
+ */
+export async function auditPageWithLlmWebFetch(
+  url: string,
+  targetKeyword: string
+): Promise<LlmPageAuditResponse | null> {
+  const prompt = `Perform an in-depth SEO audit of this page for the primary keyword "${targetKeyword}".
+Evaluate:
+1. Target keyword intent alignment.
+2. Missing subtopics or unanswered user questions.
+3. Content depth and structure compared to top ranking SERP competitors.
+
+Return ONLY valid JSON:
+{
+  "score": 85,
+  "criticalIssues": ["Issue 1", "Issue 2"],
+  "recommendedImprovements": ["Improvement 1", "Improvement 2", "Improvement 3"],
+  "missingSubtopics": ["Missing subtopic 1", "Missing subtopic 2"],
+  "intentAlignment": "Short summary of search intent match"
+}`;
+
+  const jsonStr = await callOpenRouterWithWebFetch(url, prompt);
+  if (!jsonStr) return null;
+  try {
+    return JSON.parse(jsonStr) as LlmPageAuditResponse;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 3. Competitor Content Gap Synthesis via web_search
+ */
+export async function synthesizeCompetitorGapWithLlm(
+  targetSeed: string,
+  competitorSeeds: string[],
+  discoveredGaps: string[]
+): Promise<LlmCompetitorGapResponse | null> {
+  const prompt = `Use web_search to analyze current competitor search results for target topic "${targetSeed}" vs competitors: ${competitorSeeds.join(', ')}.
+Discovered keyword gaps:
+${discoveredGaps.slice(0, 20).map((k) => `- ${k}`).join('\n')}
+
+Synthesize the competitor positioning and prescribe the optimal differentiation angle.
+
+Return ONLY valid JSON:
+{
+  "topCompetitorAngles": ["Angle 1", "Angle 2"],
+  "highOpportunitySubtopics": ["Subtopic 1", "Subtopic 2", "Subtopic 3"],
+  "differentiationStrategy": "1-2 sentence actionable strategy to outrank these competitors"
+}`;
+
+  const jsonStr = await callOpenRouterWithSearch(prompt);
+  if (!jsonStr) return null;
+  try {
+    return JSON.parse(jsonStr) as LlmCompetitorGapResponse;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 4. Page Expansion Title & Meta Description Generator via LLM
  */
 export async function generateLlmPageTitleMeta(
   pageUrl: string,
@@ -160,7 +285,7 @@ Return ONLY valid JSON:
 }
 
 /**
- * 3. Rankings Rescue Protocol Prescriptions via LLM
+ * 5. Rankings Rescue Protocol Prescriptions via LLM
  */
 export async function generateLlmRankingsRescue(
   query: string,
@@ -194,7 +319,7 @@ Return ONLY valid JSON:
 }
 
 /**
- * 4. Strategic GSC Gap Action Plan via LLM
+ * 6. Strategic GSC Gap Action Plan via LLM
  */
 export async function generateLlmGapAction(
   query: string,

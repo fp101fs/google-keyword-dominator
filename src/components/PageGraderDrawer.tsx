@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, ShieldCheck, AlertCircle, CheckCircle, Loader2, Gauge, Globe } from 'lucide-react';
+import { X, AlertCircle, CheckCircle, Loader2, Gauge, Globe, Sparkles } from 'lucide-react';
+import { LlmPageAuditResponse } from '@/lib/llm';
 
 interface PageGraderDrawerProps {
   targetKeyword: string;
@@ -12,14 +13,17 @@ interface PageGraderDrawerProps {
 interface GradeResult {
   url: string;
   score: number;
-  details: {
-    pageTitle: string;
-    metaDesc: string;
-    h1: string[];
+  checks: { label: string; passed: boolean; tip: string }[];
+  extracted: {
+    title: string;
+    metaDescription: string;
+    h1Count: number;
+    h1s: string[];
     h2Count: number;
+    h2s: string[];
     wordCount: number;
-    checks: { label: string; passed: boolean; tip: string }[];
   };
+  llmAudit?: LlmPageAuditResponse | null;
 }
 
 export const PageGraderDrawer: React.FC<PageGraderDrawerProps> = ({
@@ -70,10 +74,10 @@ export const PageGraderDrawer: React.FC<PageGraderDrawerProps> = ({
             </div>
             <div>
               <h3 className="text-base font-extrabold text-slate-900">
-                1-Click Page Grader &bull; SerpDo Engine
+                1-Click Page Grader &bull; DeepSeek AI
               </h3>
               <p className="text-xs text-slate-500">
-                Audit any URL against target keyword: <strong className="text-slate-800">&quot;{targetKeyword}&quot;</strong>
+                Audit URL against target keyword: <strong className="text-slate-800">&quot;{targetKeyword}&quot;</strong>
               </p>
             </div>
           </div>
@@ -127,13 +131,13 @@ export const PageGraderDrawer: React.FC<PageGraderDrawerProps> = ({
               <div className="p-6 bg-slate-900 text-white rounded-2xl flex items-center justify-between shadow-xl">
                 <div>
                   <span className="text-[10px] uppercase font-mono font-bold text-emerald-400 tracking-wider">
-                    SEO + GEO Readiness Score
+                    SEO Readiness Score
                   </span>
                   <div className="text-2xl font-black mt-1">
                     {result.score >= 80 ? 'Excellent' : result.score >= 60 ? 'Moderate' : 'Needs Optimization'}
                   </div>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    Word count: ~{result.details.wordCount} words &bull; H2 tags: {result.details.h2Count}
+                    Word count: ~{result.extracted.wordCount} words &bull; H2 tags: {result.extracted.h2Count}
                   </p>
                 </div>
                 <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-black border-2 ${
@@ -143,13 +147,55 @@ export const PageGraderDrawer: React.FC<PageGraderDrawerProps> = ({
                 </div>
               </div>
 
+              {/* LLM Strategic Audit */}
+              {result.llmAudit && (
+                <div className="p-4 bg-purple-50/70 border border-purple-200 rounded-2xl space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-purple-600" />
+                    <span className="text-xs font-black text-purple-900 uppercase tracking-wider">
+                      DeepSeek Editorial Audit
+                    </span>
+                  </div>
+
+                  {result.llmAudit.intentAlignment && (
+                    <div className="text-xs text-slate-700">
+                      <strong className="text-slate-900">Intent Match:</strong> {result.llmAudit.intentAlignment}
+                    </div>
+                  )}
+
+                  {result.llmAudit.missingSubtopics && result.llmAudit.missingSubtopics.length > 0 && (
+                    <div className="space-y-1">
+                      <strong className="text-xs text-slate-900 block">Missing Key Subtopics:</strong>
+                      <div className="flex flex-wrap gap-1.5 pt-0.5">
+                        {result.llmAudit.missingSubtopics.map((sub, i) => (
+                          <span key={i} className="text-[11px] bg-white border border-purple-300 text-purple-900 px-2 py-0.5 rounded-lg font-medium">
+                            {sub}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {result.llmAudit.recommendedImprovements && result.llmAudit.recommendedImprovements.length > 0 && (
+                    <div className="space-y-1 pt-1">
+                      <strong className="text-xs text-slate-900 block">Recommended Optimizations:</strong>
+                      <ul className="list-disc list-inside space-y-1 text-xs text-slate-700">
+                        {result.llmAudit.recommendedImprovements.map((imp, i) => (
+                          <li key={i}>{imp}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Actionable Checks List */}
               <div className="space-y-3">
                 <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-700">
-                  Audit Checklist &amp; Recommendations
+                  On-Page SEO Checklist
                 </h4>
                 <div className="space-y-2">
-                  {result.details.checks.map((c, i) => (
+                  {result.checks.map((c, i) => (
                     <div
                       key={i}
                       className={`p-3.5 rounded-xl border text-xs flex items-start gap-3 ${
@@ -178,20 +224,6 @@ export const PageGraderDrawer: React.FC<PageGraderDrawerProps> = ({
               </div>
             </div>
           )}
-        </div>
-
-        {/* Drawer Footer */}
-        <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-          <span className="flex items-center gap-1">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Instant heuristic analysis</span>
-          </span>
-          <button
-            onClick={onClose}
-            className="px-4 py-2 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-xl font-bold cursor-pointer transition-colors"
-          >
-            Close
-          </button>
         </div>
       </div>
     </div>

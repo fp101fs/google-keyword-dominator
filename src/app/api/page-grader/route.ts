@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { auditPageWithLlmWebFetch } from '@/lib/llm';
+
+export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,7 +16,7 @@ export async function POST(req: NextRequest) {
       targetUrl = `https://${targetUrl}`;
     }
 
-    // Fast heuristic HTML crawl (with timeout)
+    // 1. Fast heuristic HTML crawl (with timeout)
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
 
@@ -28,7 +31,6 @@ export async function POST(req: NextRequest) {
       });
       html = await resp.text();
     } catch {
-      // Fallback placeholder structure if target page blocks automated requests
       html = `<html><head><title>${targetUrl}</title></head><body><h1>${targetKeyword || 'Audit Page'}</h1></body></html>`;
     } finally {
       clearTimeout(timeoutId);
@@ -48,11 +50,9 @@ export async function POST(req: NextRequest) {
     const words = cleanText.split(/\s+/).filter(Boolean);
     const wordCount = words.length;
 
-    // Calculate 0-100 Score
     let score = 50;
     const checks: { label: string; passed: boolean; tip: string }[] = [];
 
-    // Title Check
     if (pageTitle.length >= 25 && pageTitle.length <= 65) {
       score += 10;
       checks.push({ label: 'Title Tag Length', passed: true, tip: `Good title length (${pageTitle.length} chars).` });
@@ -60,56 +60,58 @@ export async function POST(req: NextRequest) {
       checks.push({ label: 'Title Tag Length', passed: false, tip: 'Keep title between 30 and 60 characters.' });
     }
 
-    // Target Keyword in Title
-    const normKw = (targetKeyword || '').toLowerCase();
-    if (normKw && pageTitle.toLowerCase().includes(normKw)) {
-      score += 15;
-      checks.push({ label: 'Keyword in Title', passed: true, tip: `Target keyword "${targetKeyword}" appears in <title>.` });
-    } else if (normKw) {
-      checks.push({ label: 'Keyword in Title', passed: false, tip: `Add "${targetKeyword}" closer to the beginning of your <title>.` });
-    }
-
-    // Meta Description Check
-    if (metaDesc.length >= 80 && metaDesc.length <= 165) {
+    if (metaDesc.length >= 70 && metaDesc.length <= 165) {
       score += 10;
-      checks.push({ label: 'Meta Description', passed: true, tip: `Optimal meta description (${metaDesc.length} chars).` });
+      checks.push({ label: 'Meta Description', passed: true, tip: `Good description length (${metaDesc.length} chars).` });
     } else {
-      checks.push({ label: 'Meta Description', passed: false, tip: 'Add a 120-160 character meta description with a clear call-to-action.' });
+      checks.push({ label: 'Meta Description', passed: false, tip: 'Add a meta description between 80-160 characters.' });
     }
 
-    // H1 Check
     if (h1Matches.length === 1) {
       score += 10;
-      checks.push({ label: 'Single H1 Header', passed: true, tip: 'Exactly 1 H1 tag detected.' });
+      checks.push({ label: 'Single H1 Tag', passed: true, tip: `Found exactly 1 H1: "${h1Matches[0]}".` });
+    } else if (h1Matches.length === 0) {
+      checks.push({ label: 'Single H1 Tag', passed: false, tip: 'Missing H1 heading on page.' });
     } else {
-      checks.push({ label: 'Single H1 Header', passed: false, tip: `Found ${h1Matches.length} H1 tags. Ensure exactly 1 H1 per page.` });
+      checks.push({ label: 'Single H1 Tag', passed: false, tip: `Found ${h1Matches.length} H1 tags. Keep only one main H1.` });
     }
 
-    // Content Depth
+    if (h2Matches.length >= 3) {
+      score += 10;
+      checks.push({ label: 'H2 Subheadings Depth', passed: true, tip: `Good structure (${h2Matches.length} H2s).` });
+    } else {
+      checks.push({ label: 'H2 Subheadings Depth', passed: false, tip: 'Add more H2 headings to cover related subtopics.' });
+    }
+
     if (wordCount >= 600) {
-      score += 15;
-      checks.push({ label: 'Content Depth', passed: true, tip: `Substantial body content (~${wordCount} words).` });
+      score += 10;
+      checks.push({ label: 'Content Word Count', passed: true, tip: `Authoritative length (~${wordCount} words).` });
     } else {
-      checks.push({ label: 'Content Depth', passed: false, tip: `Thin content detected (~${wordCount} words). Expand to at least 800+ words.` });
+      checks.push({ label: 'Content Word Count', passed: false, tip: `Thin content (~${wordCount} words). Aim for 800+ words.` });
     }
 
-    score = Math.min(100, Math.max(20, score));
+    // 2. Call genuine LLM via web_fetch for deep editorial insights
+    const llmAudit = await auditPageWithLlmWebFetch(targetUrl, targetKeyword || pageTitle);
 
     return NextResponse.json({
       success: true,
       url: targetUrl,
-      score,
-      details: {
-        pageTitle,
-        metaDesc,
-        h1: h1Matches,
+      targetKeyword,
+      score: llmAudit?.score ?? Math.min(100, score),
+      checks,
+      extracted: {
+        title: pageTitle,
+        metaDescription: metaDesc,
+        h1Count: h1Matches.length,
+        h1s: h1Matches,
         h2Count: h2Matches.length,
+        h2s: h2Matches.slice(0, 10),
         wordCount,
-        checks,
       },
+      llmAudit,
     });
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Failed to grade page';
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : 'Failed to grade page';
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

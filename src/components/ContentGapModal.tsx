@@ -2,7 +2,9 @@
 
 import React, { useState } from 'react';
 import { KeywordGapResult } from '@/lib/content-gap';
-import { Target, X, Loader2, Sparkles, AlertCircle, Copy, Check } from 'lucide-react';
+import { KeywordItem } from '@/lib/autocomplete';
+import { Target, X, Loader2, Sparkles, AlertCircle, Copy, Check, Lightbulb } from 'lucide-react';
+import { LlmCompetitorGapResponse } from '@/lib/llm';
 
 interface ContentGapModalProps {
   initialSeed: string;
@@ -14,6 +16,7 @@ export const ContentGapModal: React.FC<ContentGapModalProps> = ({ initialSeed, i
   const [targetSeed, setTargetSeed] = useState(initialSeed);
   const [competitorInput, setCompetitorInput] = useState('');
   const [gapData, setGapData] = useState<KeywordGapResult | null>(null);
+  const [llmStrategy, setLlmStrategy] = useState<LlmCompetitorGapResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'gaps' | 'shared' | 'unique'>('gaps');
@@ -35,6 +38,7 @@ export const ContentGapModal: React.FC<ContentGapModalProps> = ({ initialSeed, i
 
     setIsLoading(true);
     setError(null);
+    setLlmStrategy(null);
 
     try {
       const res = await fetch('/api/content-gap', {
@@ -49,6 +53,9 @@ export const ContentGapModal: React.FC<ContentGapModalProps> = ({ initialSeed, i
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Failed to compute content gap');
       setGapData(json.data);
+      if (json.llmStrategy) {
+        setLlmStrategy(json.llmStrategy);
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error analyzing content gap';
       setError(msg);
@@ -63,7 +70,7 @@ export const ContentGapModal: React.FC<ContentGapModalProps> = ({ initialSeed, i
     setTimeout(() => setCopiedKw(null), 1500);
   };
 
-  const handleCopyAll = async (list: { keyword: string }[]) => {
+  const handleCopyAll = async (list: KeywordItem[]) => {
     const text = list.map((k) => k.keyword).join('\n');
     await navigator.clipboard.writeText(text);
     setCopiedKw('ALL');
@@ -74,39 +81,38 @@ export const ContentGapModal: React.FC<ContentGapModalProps> = ({ initialSeed, i
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
       <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
         {/* Modal Header */}
-        <div className="p-4 sm:p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
+        <div className="p-4 sm:p-6 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-rose-900 via-purple-900 to-slate-900 text-white">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-rose-500 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-rose-500/20">
+            <div className="p-2 bg-rose-500/20 border border-rose-400/30 text-rose-300 rounded-xl">
               <Target className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                Ahrefs Content Gap Explorer
-                <span className="text-xs bg-rose-100 text-rose-800 font-semibold px-2 py-0.5 rounded-full">
-                  Competitor Keyword Gap
+              <h3 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                Competitor Content Gap Matrix
+                <span className="text-[10px] bg-rose-500 text-white font-extrabold px-2 py-0.5 rounded-full">
+                  DeepSeek AI
                 </span>
               </h3>
-              <p className="text-xs text-slate-500">
-                Discover keywords that your competitors rank for, but your target seed is missing.
+              <p className="text-xs text-rose-200">
+                Discover search terms competitors rank for that your seed is currently missing.
               </p>
             </div>
           </div>
-
           <button
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+            className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Input Form */}
-        <div className="p-4 sm:p-6 border-b border-slate-100 bg-slate-50/40">
+        {/* Input Controls */}
+        <div className="p-4 sm:p-6 bg-slate-50 border-b border-slate-200">
           <form onSubmit={handleRunGap} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
-                  Your Target Seed / Topic
+                  Your Target Seed
                 </label>
                 <input
                   type="text"
@@ -165,6 +171,31 @@ export const ContentGapModal: React.FC<ContentGapModalProps> = ({ initialSeed, i
 
           {gapData && (
             <div className="space-y-4 animate-fadeIn">
+              {/* LLM Differentiation Strategy Card */}
+              {llmStrategy && (
+                <div className="p-4 bg-purple-50 border border-purple-200 rounded-xl space-y-2.5 text-xs text-slate-800">
+                  <div className="flex items-center gap-2 font-bold text-purple-900">
+                    <Lightbulb className="w-4 h-4 text-purple-600" />
+                    <span>DeepSeek Strategic Differentiation Angle</span>
+                  </div>
+                  <p className="text-slate-700 leading-relaxed font-medium">
+                    {llmStrategy.differentiationStrategy}
+                  </p>
+                  {llmStrategy.highOpportunitySubtopics && llmStrategy.highOpportunitySubtopics.length > 0 && (
+                    <div className="pt-1">
+                      <span className="text-[11px] font-bold text-slate-600 block mb-1">High-Opportunity Subtopics to Target:</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {llmStrategy.highOpportunitySubtopics.map((sub, i) => (
+                          <span key={i} className="text-[10px] bg-white border border-purple-200 text-purple-900 font-bold px-2 py-0.5 rounded-md">
+                            {sub}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Coverage Metrics Card */}
               <div className="grid grid-cols-3 gap-3 p-4 bg-slate-50 border border-slate-200 rounded-xl text-center">
                 <div>
@@ -182,28 +213,34 @@ export const ContentGapModal: React.FC<ContentGapModalProps> = ({ initialSeed, i
               </div>
 
               {/* Tabs */}
-              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between border-b border-slate-200">
+                <div className="flex gap-2">
                   <button
                     onClick={() => setActiveTab('gaps')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                      activeTab === 'gaps' ? 'bg-rose-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-slate-100'
+                    className={`pb-2 px-1 text-xs font-bold transition-all border-b-2 cursor-pointer ${
+                      activeTab === 'gaps'
+                        ? 'border-rose-600 text-rose-600'
+                        : 'border-transparent text-slate-500 hover:text-slate-800'
                     }`}
                   >
-                    Missed Gaps ({gapData.gapOpportunities.length})
+                    Keyword Gaps ({gapData.gapOpportunities.length})
                   </button>
                   <button
                     onClick={() => setActiveTab('shared')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                      activeTab === 'shared' ? 'bg-blue-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-slate-100'
+                    className={`pb-2 px-1 text-xs font-bold transition-all border-b-2 cursor-pointer ${
+                      activeTab === 'shared'
+                        ? 'border-blue-600 text-blue-600'
+                        : 'border-transparent text-slate-500 hover:text-slate-800'
                     }`}
                   >
                     Shared ({gapData.sharedKeywords.length})
                   </button>
                   <button
                     onClick={() => setActiveTab('unique')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                      activeTab === 'unique' ? 'bg-emerald-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-slate-100'
+                    className={`pb-2 px-1 text-xs font-bold transition-all border-b-2 cursor-pointer ${
+                      activeTab === 'unique'
+                        ? 'border-emerald-600 text-emerald-600'
+                        : 'border-transparent text-slate-500 hover:text-slate-800'
                     }`}
                   >
                     Your Unique ({gapData.uniqueStrengths.length})
@@ -211,62 +248,55 @@ export const ContentGapModal: React.FC<ContentGapModalProps> = ({ initialSeed, i
                 </div>
 
                 <button
-                  onClick={() => {
-                    const list =
+                  onClick={() =>
+                    handleCopyAll(
                       activeTab === 'gaps'
                         ? gapData.gapOpportunities
                         : activeTab === 'shared'
                         ? gapData.sharedKeywords
-                        : gapData.uniqueStrengths;
-                    handleCopyAll(list);
-                  }}
-                  className="inline-flex items-center gap-1 text-xs font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 px-3 py-1 rounded-lg cursor-pointer"
+                        : gapData.uniqueStrengths
+                    )
+                  }
+                  className="text-xs font-bold text-slate-600 hover:text-slate-900 flex items-center gap-1 cursor-pointer pb-2"
                 >
-                  {copiedKw === 'ALL' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>Copy List</span>
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>{copiedKw === 'ALL' ? 'Copied All!' : 'Copy List'}</span>
                 </button>
               </div>
 
               {/* Keyword List */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-72 overflow-y-auto pr-1">
+              <div className="space-y-1.5 max-h-[300px] overflow-y-auto pr-1">
                 {(activeTab === 'gaps'
                   ? gapData.gapOpportunities
                   : activeTab === 'shared'
                   ? gapData.sharedKeywords
                   : gapData.uniqueStrengths
-                ).map((kw, idx) => (
+                ).map((kw: KeywordItem, i: number) => (
                   <div
-                    key={idx}
-                    onClick={() => handleCopy(kw.keyword)}
-                    className="p-2.5 bg-white border border-slate-200 rounded-xl hover:border-blue-300 flex items-center justify-between text-xs transition-all cursor-pointer group shadow-2xs"
+                    key={i}
+                    className="flex items-center justify-between p-2.5 bg-slate-50 hover:bg-slate-100/80 rounded-xl text-xs border border-slate-200/60 transition-colors group"
                   >
-                    <span className="font-semibold text-slate-800 truncate mr-2">{kw.keyword}</span>
+                    <span className="font-semibold text-slate-800 truncate pr-2">{kw.keyword}</span>
                     <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded font-mono text-slate-600">
-                        {kw.seedKeyword}
+                      <span className="text-[10px] text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">
+                        {kw.intent}
                       </span>
-                      {copiedKw === kw.keyword ? (
-                        <Check className="w-3.5 h-3.5 text-emerald-600" />
-                      ) : (
-                        <Copy className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-700" />
-                      )}
+                      <button
+                        onClick={() => handleCopy(kw.keyword)}
+                        className="p-1 text-slate-400 hover:text-slate-700 rounded transition-colors cursor-pointer"
+                      >
+                        {copiedKw === kw.keyword ? (
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        ) : (
+                          <Copy className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        )}
+                      </button>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
           )}
-        </div>
-
-        {/* Modal Footer */}
-        <div className="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
-          <span className="text-xs text-slate-400">Ahrefs-grade competitor content gap clustering</span>
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-100 cursor-pointer"
-          >
-            Close
-          </button>
         </div>
       </div>
     </div>
