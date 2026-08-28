@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { KeywordItem } from '@/lib/autocomplete';
-import { Network, Copy, Check, ZoomIn, ZoomOut, RefreshCw } from 'lucide-react';
+import { Network, Copy, Check, ZoomIn, ZoomOut, RefreshCw, ExternalLink, Globe } from 'lucide-react';
 
 interface VisualSearchTreeProps {
   seed: string;
@@ -10,12 +10,25 @@ interface VisualSearchTreeProps {
 }
 
 export const VisualSearchTree: React.FC<VisualSearchTreeProps> = ({ seed, keywords }) => {
-  const [copiedKeyword, setCopiedKeyword] = useState<string | null>(null);
-  const [hoveredItem, setHoveredItem] = useState<{ label: string; details: string; color: string } | null>(null);
+  const [copiedNotification, setCopiedNotification] = useState<string | null>(null);
+  const [hoveredNode, setHoveredNode] = useState<{
+    id: string;
+    label: string;
+    fullText: string;
+    groupName: string;
+    itemData?: KeywordItem;
+  } | null>(null);
+  const [selectedNode, setSelectedNode] = useState<{
+    id: string;
+    label: string;
+    fullText: string;
+    groupName: string;
+    itemData?: KeywordItem;
+  } | null>(null);
   const [zoom, setZoom] = useState<number>(1);
   const [activeRayIntent, setActiveRayIntent] = useState<string>('all');
 
-  // Radial groupings (AnswerThePublic style)
+  // Radial groupings
   const rayGroups = useMemo(() => {
     const questions = keywords.filter((k) =>
       /^(how|what|why|where|when|who|which|can|is|are)/i.test(k.keyword) ||
@@ -57,17 +70,15 @@ export const VisualSearchTree: React.FC<VisualSearchTreeProps> = ({ seed, keywor
 
     const centerX = 400;
     const centerY = 400;
-    const innerRadius = 140; // Ring 1: Category branches
-    const outerRadius = 280; // Ring 2: Leaf keyword rays
+    const innerRadius = 140;
+    const outerRadius = 280;
 
-    // Generate total items for 360 degree circle distribution
     let currentItemIndex = 0;
     const totalLeafs = rayGroups.reduce((acc, g) => acc + g.items.length, 0) || 1;
 
     rayGroups.forEach((group, groupIdx) => {
       if (activeRayIntent !== 'all' && activeRayIntent !== group.id) return;
 
-      // Group Inner Node
       const groupAngle = (groupIdx / rayGroups.length) * 2 * Math.PI - Math.PI / 2;
       const gx = centerX + Math.cos(groupAngle) * innerRadius;
       const gy = centerY + Math.sin(groupAngle) * innerRadius;
@@ -84,7 +95,6 @@ export const VisualSearchTree: React.FC<VisualSearchTreeProps> = ({ seed, keywor
         groupName: group.name,
       });
 
-      // Group Leaf Nodes radiating outwards
       group.items.forEach((item) => {
         const leafAngle = (currentItemIndex / totalLeafs) * 2 * Math.PI - Math.PI / 2;
         currentItemIndex++;
@@ -110,11 +120,25 @@ export const VisualSearchTree: React.FC<VisualSearchTreeProps> = ({ seed, keywor
     return nodes;
   }, [rayGroups, activeRayIntent]);
 
-  const handleCopy = async (kw: string) => {
-    await navigator.clipboard.writeText(kw);
-    setCopiedKeyword(kw);
-    setTimeout(() => setCopiedKeyword(null), 1500);
+  const handleCopy = async (text: string) => {
+    await navigator.clipboard.writeText(text);
+    setCopiedNotification(`Copied "${text}" to clipboard!`);
+    setTimeout(() => setCopiedNotification(null), 2500);
   };
+
+  const handleNodeClick = (node: {
+    id: string;
+    label: string;
+    fullText: string;
+    groupName: string;
+    itemData?: KeywordItem;
+  }) => {
+    setSelectedNode(node);
+    const copyTarget = node.itemData ? node.itemData.keyword : node.fullText;
+    handleCopy(copyTarget);
+  };
+
+  const activeItem = selectedNode || hoveredNode;
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200/90 p-5 sm:p-6 shadow-xs space-y-6">
@@ -126,13 +150,13 @@ export const VisualSearchTree: React.FC<VisualSearchTreeProps> = ({ seed, keywor
           </div>
           <div>
             <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              Radial Concentric Mindmap
+              Radial 360&deg; Sunburst Mindmap
               <span className="text-xs bg-sky-100 text-sky-800 font-semibold px-2 py-0.5 rounded-full">
-                360&deg; Sunburst Rays
+                Interactive Sunburst
               </span>
             </h3>
             <p className="text-xs text-slate-500">
-              Concentric circular search wheel radiating out from &quot;<strong>{seed}</strong>&quot;. Click any ray to copy the term.
+              Concentric circular search wheel for &quot;<strong>{seed}</strong>&quot;. Hover over any ray to inspect metrics; click to copy and lock selection.
             </p>
           </div>
         </div>
@@ -188,14 +212,22 @@ export const VisualSearchTree: React.FC<VisualSearchTreeProps> = ({ seed, keywor
       </div>
 
       {/* SVG Radial Wheel Canvas */}
-      <div className="relative bg-slate-950 rounded-2xl p-4 sm:p-6 overflow-hidden select-none flex items-center justify-center min-h-[500px] border border-slate-800">
+      <div className="relative bg-slate-950 rounded-2xl p-4 sm:p-6 overflow-hidden select-none flex items-center justify-center min-h-[520px] border border-slate-800">
+        {/* Global Copy Banner */}
+        {copiedNotification && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-emerald-600 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-2xl flex items-center gap-2 animate-fadeIn z-30 border border-emerald-400">
+            <Check className="w-4 h-4" />
+            <span>{copiedNotification}</span>
+          </div>
+        )}
+
         <div
           style={{
             transform: `scale(${zoom})`,
             transformOrigin: 'center center',
             transition: 'transform 0.2s ease-out',
           }}
-          className="w-[700px] h-[700px] relative shrink-0"
+          className="w-[720px] h-[720px] relative shrink-0"
         >
           <svg viewBox="0 0 800 800" className="w-full h-full">
             {/* Concentric Guide Rings */}
@@ -216,41 +248,54 @@ export const VisualSearchTree: React.FC<VisualSearchTreeProps> = ({ seed, keywor
               />
             ))}
 
-            {/* Center Core Seed Node */}
-            <circle cx="400" cy="400" r="44" fill="#2563eb" stroke="#ffffff" strokeWidth="3" />
-            <text
-              x="400"
-              y="396"
-              fill="#ffffff"
-              fontSize="11"
-              fontWeight="900"
-              textAnchor="middle"
-              className="uppercase tracking-widest"
+            {/* Center Core Seed Node (Clickable) */}
+            <g
+              className="cursor-pointer"
+              onClick={() => {
+                handleCopy(seed);
+                setSelectedNode({
+                  id: 'root-seed',
+                  label: seed,
+                  fullText: seed,
+                  groupName: 'Root Seed',
+                });
+              }}
             >
-              SEED
-            </text>
-            <text
-              x="400"
-              y="412"
-              fill="#ffffff"
-              fontSize="13"
-              fontWeight="bold"
-              textAnchor="middle"
-            >
-              {seed.length > 12 ? `${seed.slice(0, 10)}...` : seed}
-            </text>
+              <circle cx="400" cy="400" r="46" fill="#2563eb" stroke="#ffffff" strokeWidth="3" />
+              <text
+                x="400"
+                y="395"
+                fill="#ffffff"
+                fontSize="10"
+                fontWeight="900"
+                textAnchor="middle"
+                className="uppercase tracking-widest"
+              >
+                ROOT SEED
+              </text>
+              <text
+                x="400"
+                y="413"
+                fill="#ffffff"
+                fontSize="13"
+                fontWeight="bold"
+                textAnchor="middle"
+              >
+                {seed.length > 12 ? `${seed.slice(0, 10)}...` : seed}
+              </text>
+            </g>
 
             {/* Radial Nodes */}
             {radialNodes.map((node) => {
               const isGroup = node.id.startsWith('group-');
-              const isHovered = hoveredItem?.label === node.fullText;
+              const isHovered = hoveredNode?.id === node.id;
+              const isSelected = selectedNode?.id === node.id;
 
-              // Text angle alignment for outer sunburst rays
               const angleDeg = (node.angle * 180) / Math.PI;
               const isRightSide = Math.cos(node.angle) >= 0;
               const textRotation = isRightSide ? angleDeg : angleDeg + 180;
               const textAnchor = isRightSide ? 'start' : 'end';
-              const textOffset = isRightSide ? 12 : -12;
+              const textOffset = isRightSide ? 14 : -14;
 
               return (
                 <g key={node.id} className="cursor-pointer">
@@ -258,23 +303,13 @@ export const VisualSearchTree: React.FC<VisualSearchTreeProps> = ({ seed, keywor
                   <circle
                     cx={node.x}
                     cy={node.y}
-                    r={isGroup ? 16 : isHovered ? 8 : 5}
+                    r={isGroup ? 16 : isSelected ? 9 : isHovered ? 8 : 5}
                     fill={node.color}
-                    fillOpacity={isGroup ? 0.9 : 0.8}
-                    stroke="#ffffff"
-                    strokeWidth={isGroup ? 2 : 1}
-                    onMouseEnter={() =>
-                      setHoveredItem({
-                        label: node.fullText,
-                        details: isGroup
-                          ? `Cluster Category: ${node.groupName}`
-                          : `AP: ${node.itemData?.apFormatted || '1st'} | Score: ${node.itemData?.relativeScore || 80}%`,
-                        color: node.color,
-                      })
-                    }
-                    onClick={() => {
-                      if (node.itemData) handleCopy(node.itemData.keyword);
-                    }}
+                    fillOpacity={isGroup ? 0.9 : isSelected || isHovered ? 1 : 0.8}
+                    stroke={isSelected ? '#38bdf8' : isHovered ? '#ffffff' : '#ffffff'}
+                    strokeWidth={isGroup ? 2 : isSelected ? 3 : isHovered ? 2 : 1}
+                    onMouseEnter={() => setHoveredNode(node)}
+                    onClick={() => handleNodeClick(node)}
                   />
 
                   {/* Node Label Text */}
@@ -294,13 +329,14 @@ export const VisualSearchTree: React.FC<VisualSearchTreeProps> = ({ seed, keywor
                     <text
                       x={node.x + textOffset}
                       y={node.y + 3}
-                      fill={isHovered ? '#ffffff' : '#94a3b8'}
-                      fontSize={isHovered ? '11' : '9'}
-                      fontWeight={isHovered ? 'bold' : 'normal'}
+                      fill={isSelected ? '#38bdf8' : isHovered ? '#ffffff' : '#94a3b8'}
+                      fontSize={isSelected || isHovered ? '11' : '9'}
+                      fontWeight={isSelected || isHovered ? 'bold' : 'normal'}
                       textAnchor={textAnchor}
                       transform={`rotate(${textRotation}, ${node.x}, ${node.y})`}
                       className="transition-all duration-150"
-                      onClick={() => node.itemData && handleCopy(node.itemData.keyword)}
+                      onMouseEnter={() => setHoveredNode(node)}
+                      onClick={() => handleNodeClick(node)}
                     >
                       {node.label.length > 20 ? `${node.label.slice(0, 18)}..` : node.label}
                     </text>
@@ -311,25 +347,65 @@ export const VisualSearchTree: React.FC<VisualSearchTreeProps> = ({ seed, keywor
           </svg>
         </div>
 
-        {/* Hovered Keyword Card */}
-        {hoveredItem && (
-          <div className="absolute bottom-4 left-4 bg-slate-900/90 border border-slate-700 backdrop-blur-md rounded-xl p-3 text-white text-xs max-w-xs shadow-2xl space-y-1 animate-fadeIn">
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-extrabold text-sm text-sky-300 truncate">
-                {hoveredItem.label}
-              </span>
+        {/* Live Hover/Click Inspector Overlay Card */}
+        {activeItem && (
+          <div className="absolute bottom-4 left-4 bg-slate-900/98 border border-slate-700 backdrop-blur-md rounded-xl p-4 text-white text-xs max-w-sm shadow-2xl space-y-2 animate-fadeIn z-20">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <span className="text-[10px] uppercase font-mono font-bold text-sky-400 block">
+                  {selectedNode?.id === activeItem.id ? 'Selected Ray Node' : 'Hovered Node'}
+                </span>
+                <span className="font-extrabold text-sm text-white block mt-0.5 leading-snug">
+                  {activeItem.fullText}
+                </span>
+              </div>
               <button
-                onClick={() => handleCopy(hoveredItem.label)}
-                className="p-1 hover:bg-slate-800 rounded text-slate-300 hover:text-white cursor-pointer"
+                onClick={() => handleCopy(activeItem.itemData ? activeItem.itemData.keyword : activeItem.fullText)}
+                className="p-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-300 hover:text-white transition-colors cursor-pointer shrink-0"
+                title="Copy term"
               >
-                {copiedKeyword === hoveredItem.label ? (
-                  <Check className="w-3.5 h-3.5 text-emerald-400" />
-                ) : (
-                  <Copy className="w-3.5 h-3.5" />
-                )}
+                <Copy className="w-3.5 h-3.5" />
               </button>
             </div>
-            <div className="text-[11px] text-slate-400">{hoveredItem.details}</div>
+
+            {activeItem.itemData ? (
+              <>
+                <div className="grid grid-cols-3 gap-2 p-2 bg-slate-950/80 rounded-lg text-center border border-slate-800">
+                  <div>
+                    <span className="text-[9px] uppercase font-bold text-slate-400 block">Score</span>
+                    <span className="text-xs font-black text-white">{activeItem.itemData.relativeScore}%</span>
+                  </div>
+                  <div>
+                    <span className="text-[9px] uppercase font-bold text-slate-400 block">AP Rank</span>
+                    <span className="text-xs font-black text-sky-300">{activeItem.itemData.apFormatted}</span>
+                  </div>
+                  <div>
+                    <span className="text-[9px] uppercase font-bold text-slate-400 block">Difficulty</span>
+                    <span className="text-xs font-black text-amber-300">{activeItem.itemData.diff}</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between text-[11px] text-slate-300 pt-1 border-t border-slate-800">
+                  <div className="flex items-center gap-1.5">
+                    <Globe className="w-3 h-3 text-slate-400" />
+                    <span>Cluster: <strong className="text-white">{activeItem.groupName}</strong></span>
+                  </div>
+                  <a
+                    href={`https://www.google.com/search?q=${encodeURIComponent(activeItem.itemData.keyword)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sky-400 hover:underline flex items-center gap-1 font-semibold text-[10px]"
+                  >
+                    <span>Google</span>
+                    <ExternalLink className="w-2.5 h-2.5" />
+                  </a>
+                </div>
+              </>
+            ) : (
+              <div className="text-[11px] text-slate-400 pt-1">
+                Concentric Category Hub &bull; {activeItem.groupName}
+              </div>
+            )}
           </div>
         )}
       </div>

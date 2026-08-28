@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { KeywordItem } from '@/lib/autocomplete';
-import { ScatterChart, Copy, Check, Info } from 'lucide-react';
+import { ScatterChart, Copy, Check, Info, ExternalLink, Globe } from 'lucide-react';
 import { INTENT_DEFINITIONS } from '@/lib/intent';
 
 interface ScatterPlotMatrixProps {
@@ -12,18 +12,24 @@ interface ScatterPlotMatrixProps {
 
 export const ScatterPlotMatrix: React.FC<ScatterPlotMatrixProps> = ({ seed, keywords }) => {
   const [hoveredKeyword, setHoveredKeyword] = useState<KeywordItem | null>(null);
-  const [copiedKeyword, setCopiedKeyword] = useState<string | null>(null);
+  const [selectedKeyword, setSelectedKeyword] = useState<KeywordItem | null>(null);
+  const [copiedNotification, setCopiedNotification] = useState<string | null>(null);
   const [selectedIntent, setSelectedIntent] = useState<string>('all');
 
   const filtered = useMemo(() => {
-    if (selectedIntent === 'all') return keywords.slice(0, 150); // limit to top 150 for clean scatter distribution
+    if (selectedIntent === 'all') return keywords.slice(0, 150);
     return keywords.filter((k) => k.intent === selectedIntent).slice(0, 150);
   }, [keywords, selectedIntent]);
 
   const handleCopy = async (kw: string) => {
     await navigator.clipboard.writeText(kw);
-    setCopiedKeyword(kw);
-    setTimeout(() => setCopiedKeyword(null), 1500);
+    setCopiedNotification(`Copied "${kw}" to clipboard!`);
+    setTimeout(() => setCopiedNotification(null), 2500);
+  };
+
+  const handleNodeClick = (item: KeywordItem) => {
+    setSelectedKeyword(item);
+    handleCopy(item.keyword);
   };
 
   const getIntentColor = (intent: string) => {
@@ -41,6 +47,8 @@ export const ScatterPlotMatrix: React.FC<ScatterPlotMatrixProps> = ({ seed, keyw
     }
   };
 
+  const activeItem = selectedKeyword || hoveredKeyword;
+
   return (
     <div className="bg-white rounded-2xl border border-slate-200/90 p-5 sm:p-6 shadow-xs space-y-6">
       {/* Header */}
@@ -53,11 +61,11 @@ export const ScatterPlotMatrix: React.FC<ScatterPlotMatrixProps> = ({ seed, keyw
             <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
               2D Keyword Opportunity Scatter Plot
               <span className="text-xs bg-blue-100 text-blue-800 font-semibold px-2 py-0.5 rounded-full">
-                Opportunity Quadrant
+                Opportunity Quadrants
               </span>
             </h3>
             <p className="text-xs text-slate-500">
-              Interactive 2D matrix for &quot;<strong>{seed}</strong>&quot;. Isolate low-hanging fruit in the <strong>High Score + Low AP</strong> quadrant.
+              Interactive 2D matrix for &quot;<strong>{seed}</strong>&quot;. Hover over any point to inspect real metrics; click to copy and lock selection.
             </p>
           </div>
         </div>
@@ -94,7 +102,7 @@ export const ScatterPlotMatrix: React.FC<ScatterPlotMatrixProps> = ({ seed, keyw
       <div className="p-3 bg-blue-50/60 border border-blue-100 rounded-xl text-xs text-blue-900 flex items-start gap-2">
         <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
         <p>
-          <strong>How to read this plot:</strong> The <strong>Top-Left Quadrant</strong> represents prime opportunity (Score &ge; 70% and AP &le; 3rd rank). Dot size corresponds to word length. Hover or click any dot to copy the keyword.
+          <strong>How to read this plot:</strong> The <strong>Top-Left Quadrant</strong> represents prime opportunity (Score &ge; 70% and AP &le; 3rd rank). Dot size corresponds to word length. Hover or click any dot to inspect details and copy.
         </p>
       </div>
 
@@ -114,6 +122,14 @@ export const ScatterPlotMatrix: React.FC<ScatterPlotMatrixProps> = ({ seed, keyw
           Long-Tail Discovery
         </div>
 
+        {/* Global Copy Banner */}
+        {copiedNotification && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-emerald-600 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-2xl flex items-center gap-2 animate-fadeIn z-30 border border-emerald-400">
+            <Check className="w-4 h-4" />
+            <span>{copiedNotification}</span>
+          </div>
+        )}
+
         {/* SVG Visualization */}
         <div className="w-full aspect-[16/9] max-h-[420px] min-h-[280px]">
           <svg viewBox="0 0 800 450" className="w-full h-full">
@@ -125,7 +141,7 @@ export const ScatterPlotMatrix: React.FC<ScatterPlotMatrixProps> = ({ seed, keyw
             <line x1="410" y1="50" x2="410" y2="400" stroke="#475569" strokeDasharray="4 4" strokeWidth="1" />
             <line x1="60" y1="225" x2="760" y2="225" stroke="#475569" strokeDasharray="4 4" strokeWidth="1" />
 
-            {/* Y Axis Labels (Relative Score: 0 - 100) */}
+            {/* Y Axis Labels */}
             <text x="20" y="55" fill="#94a3b8" fontSize="11" fontWeight="bold">100%</text>
             <text x="28" y="230" fill="#64748b" fontSize="10">50%</text>
             <text x="35" y="400" fill="#64748b" fontSize="10">0%</text>
@@ -133,7 +149,7 @@ export const ScatterPlotMatrix: React.FC<ScatterPlotMatrixProps> = ({ seed, keyw
               Relative Score &uarr;
             </text>
 
-            {/* X Axis Labels (Autocomplete Placement: 1st to 15th) */}
+            {/* X Axis Labels */}
             <text x="60" y="425" fill="#94a3b8" fontSize="11" fontWeight="bold">AP 1st</text>
             <text x="410" y="425" fill="#64748b" fontSize="10" textAnchor="middle">AP 8th</text>
             <text x="750" y="425" fill="#64748b" fontSize="10" textAnchor="end">AP 15th+</text>
@@ -143,62 +159,83 @@ export const ScatterPlotMatrix: React.FC<ScatterPlotMatrixProps> = ({ seed, keyw
 
             {/* Keyword Scatter Circles */}
             {filtered.map((item, idx) => {
-              // Map AP (1 to 15) to X (80 to 740)
               const cx = 80 + Math.min(14, item.ap - 1) * (660 / 14);
-              // Map Score (0 to 100) to Y (390 down to 60)
               const cy = 390 - (item.relativeScore / 100) * 330;
-              // Radius by word count (min 5, max 10)
               const r = Math.min(10, Math.max(5, item.wordCount * 1.8));
               const color = getIntentColor(item.intent);
               const isHovered = hoveredKeyword?.keyword === item.keyword;
+              const isSelected = selectedKeyword?.keyword === item.keyword;
 
               return (
-                <circle
-                  key={idx}
-                  cx={cx}
-                  cy={cy}
-                  r={isHovered ? r + 4 : r}
-                  fill={color}
-                  fillOpacity={isHovered ? 1 : 0.75}
-                  stroke={isHovered ? '#ffffff' : color}
-                  strokeWidth={isHovered ? 3 : 1}
-                  className="transition-all duration-150 cursor-pointer"
-                  onMouseEnter={() => setHoveredKeyword(item)}
-                  onClick={() => handleCopy(item.keyword)}
-                />
+                <g key={idx} className="cursor-pointer">
+                  <circle
+                    cx={cx}
+                    cy={cy}
+                    r={isSelected ? r + 6 : isHovered ? r + 4 : r}
+                    fill={color}
+                    fillOpacity={isSelected ? 1 : isHovered ? 0.95 : 0.75}
+                    stroke={isSelected ? '#38bdf8' : isHovered ? '#ffffff' : color}
+                    strokeWidth={isSelected ? 4 : isHovered ? 3 : 1}
+                    className="transition-all duration-150 cursor-pointer"
+                    onMouseEnter={() => setHoveredKeyword(item)}
+                    onClick={() => handleNodeClick(item)}
+                  />
+                </g>
               );
             })}
           </svg>
         </div>
 
-        {/* Hovered Keyword Card Overlay */}
-        {hoveredKeyword && (
-          <div className="absolute bottom-4 right-4 bg-slate-800/95 border border-slate-700 backdrop-blur-md rounded-xl p-3.5 text-white text-xs max-w-xs shadow-2xl space-y-1.5 animate-fadeIn">
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-extrabold text-sm text-blue-300 truncate">
-                {hoveredKeyword.keyword}
-              </span>
+        {/* Live Hover/Click Inspector Overlay Card */}
+        {activeItem && (
+          <div className="absolute bottom-4 right-4 bg-slate-800/98 border border-slate-600 backdrop-blur-md rounded-xl p-4 text-white text-xs max-w-sm shadow-2xl space-y-2 animate-fadeIn z-20">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <span className="text-[10px] uppercase font-mono font-bold text-sky-400 block">
+                  {selectedKeyword?.keyword === activeItem.keyword ? 'Selected Keyword' : 'Hovered Keyword'}
+                </span>
+                <span className="font-extrabold text-sm text-white block mt-0.5 leading-snug">
+                  {activeItem.keyword}
+                </span>
+              </div>
               <button
-                onClick={() => handleCopy(hoveredKeyword.keyword)}
-                className="p-1 hover:bg-slate-700 rounded text-slate-300 hover:text-white"
+                onClick={() => handleCopy(activeItem.keyword)}
+                className="p-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-300 hover:text-white transition-colors cursor-pointer shrink-0"
                 title="Copy keyword"
               >
-                {copiedKeyword === hoveredKeyword.keyword ? (
-                  <Check className="w-3.5 h-3.5 text-emerald-400" />
-                ) : (
-                  <Copy className="w-3.5 h-3.5" />
-                )}
+                <Copy className="w-3.5 h-3.5" />
               </button>
             </div>
-            <div className="flex items-center gap-2 text-[11px] text-slate-300">
-              <span>Score: <strong className="text-white">{hoveredKeyword.relativeScore}%</strong></span>
-              <span>&bull;</span>
-              <span>AP: <strong className="text-blue-300">{hoveredKeyword.apFormatted}</strong></span>
-              <span>&bull;</span>
-              <span>Diff: <strong className="text-amber-300">{hoveredKeyword.diff}</strong></span>
+
+            <div className="grid grid-cols-3 gap-2 p-2 bg-slate-900/80 rounded-lg text-center border border-slate-700/50">
+              <div>
+                <span className="text-[9px] uppercase font-bold text-slate-400 block">Score</span>
+                <span className="text-xs font-black text-white">{activeItem.relativeScore}%</span>
+              </div>
+              <div>
+                <span className="text-[9px] uppercase font-bold text-slate-400 block">AP Rank</span>
+                <span className="text-xs font-black text-sky-300">{activeItem.apFormatted}</span>
+              </div>
+              <div>
+                <span className="text-[9px] uppercase font-bold text-slate-400 block">Difficulty</span>
+                <span className="text-xs font-black text-amber-300">{activeItem.diff}</span>
+              </div>
             </div>
-            <div className="text-[10px] text-slate-400">
-              Intent: <span className="text-slate-200 capitalize font-medium">{hoveredKeyword.intent}</span> | Words: {hoveredKeyword.wordCount}
+
+            <div className="flex items-center justify-between text-[11px] text-slate-300 pt-1 border-t border-slate-700/60">
+              <div className="flex items-center gap-1.5">
+                <Globe className="w-3 h-3 text-slate-400" />
+                <span>Intent: <strong className="capitalize text-white">{activeItem.intent}</strong></span>
+              </div>
+              <a
+                href={`https://www.google.com/search?q=${encodeURIComponent(activeItem.keyword)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sky-400 hover:underline flex items-center gap-1 font-semibold text-[10px]"
+              >
+                <span>Google</span>
+                <ExternalLink className="w-2.5 h-2.5" />
+              </a>
             </div>
           </div>
         )}
