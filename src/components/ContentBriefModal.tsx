@@ -2,7 +2,23 @@
 
 import React, { useState, useEffect } from 'react';
 import { KeywordItem } from '@/lib/autocomplete';
-import { X, Copy, Check, FileText, Sparkles, HelpCircle, Layers, Gauge, Loader2, Globe, BookmarkCheck, Flame } from 'lucide-react';
+import {
+  X,
+  Copy,
+  Check,
+  FileText,
+  Sparkles,
+  HelpCircle,
+  Layers,
+  Gauge,
+  Loader2,
+  Globe,
+  BookmarkCheck,
+  Flame,
+  AlertCircle,
+  RefreshCw,
+  ExternalLink,
+} from 'lucide-react';
 import { PageGraderDrawer } from './PageGraderDrawer';
 import { ArticleWriterModal } from './ArticleWriterModal';
 import { LlmBriefResponse } from '@/lib/llm';
@@ -30,6 +46,7 @@ export const ContentBriefModal: React.FC<ContentBriefModalProps> = ({
   const [isWriterOpen, setIsWriterOpen] = useState(false);
   const [isLoadingLlm, setIsLoadingLlm] = useState(false);
   const [llmData, setLlmData] = useState<LlmBriefResponse | null>(null);
+  const [llmError, setLlmError] = useState<string | null>(null);
   const [siteContext, setSiteContext] = useState<SiteContextProfile | null>(null);
 
   useEffect(() => {
@@ -39,10 +56,11 @@ export const ContentBriefModal: React.FC<ContentBriefModalProps> = ({
 
     async function loadBrief() {
       setIsLoadingLlm(true);
+      setLlmError(null);
+
       try {
         let loadedContext: SiteContextProfile | null = null;
 
-        // Auto-fetch site context if siteUrl is present
         if (siteUrl && siteUrl.trim()) {
           try {
             const ctxRes = await fetch('/api/site-context', {
@@ -51,9 +69,9 @@ export const ContentBriefModal: React.FC<ContentBriefModalProps> = ({
               body: JSON.stringify({ url: siteUrl }),
             });
             const ctxData = await ctxRes.json();
-            if (ctxData.success && ctxData.profile) {
+            if (ctxData.success && ctxData.profile && isMounted) {
               loadedContext = ctxData.profile;
-              if (isMounted) setSiteContext(ctxData.profile);
+              setSiteContext(ctxData.profile);
             }
           } catch {
             // Non-blocking fallback
@@ -76,14 +94,24 @@ export const ContentBriefModal: React.FC<ContentBriefModalProps> = ({
               : undefined,
           }),
         });
+
         const data = await res.json();
-        if (isMounted && data.success && data.llmData) {
+        if (!res.ok || !data.success || !data.llmData) {
+          throw new Error(data.error || 'AI content brief synthesis failed. Please check your OpenRouter API key/credits.');
+        }
+
+        if (isMounted) {
           setLlmData(data.llmData);
         }
-      } catch (err) {
-        console.error('Failed to load LLM brief:', err);
+      } catch (err: unknown) {
+        if (isMounted) {
+          const msg = err instanceof Error ? err.message : 'Failed to generate brief';
+          setLlmError(msg);
+        }
       } finally {
-        if (isMounted) setIsLoadingLlm(false);
+        if (isMounted) {
+          setIsLoadingLlm(false);
+        }
       }
     }
 
@@ -99,23 +127,9 @@ export const ContentBriefModal: React.FC<ContentBriefModalProps> = ({
   // Primary Focus Keywords (Top 5 genuine search terms)
   const primaryKeywords = keywords.slice(0, 5);
 
-  // Raw Google question queries
-  const questionKeywords = keywords.filter((k) =>
-    /^(how|what|why|can|is|are|which|where|does|do|should|will|who)\b/i.test(k.keyword) ||
-    k.sources.some((s) => s.startsWith('question-'))
-  ).slice(0, 6);
-
-  // Raw Google commercial queries
-  const secondaryKeywords = keywords.filter((k) =>
-    k.intent === 'commercial' || k.intent === 'transactional' || /(best|top|vs|guide|tips|how to|review|alternative|generator|creator)/i.test(k.keyword)
-  ).slice(0, 6);
-
-  const h1Title = llmData?.suggestedH1 || `Complete Guide to ${seed}`;
-  const h2List = llmData?.recommendedH2s || secondaryKeywords.map((k) => k.keyword);
-  const faqList = llmData?.recommendedFaqs || questionKeywords.map((k) => ({
-    question: k.keyword,
-    answerSnippet: 'Direct answer snippet answering the query.',
-  }));
+  const h1Title = llmData?.suggestedH1 || `SEO Content Architecture for ${seed}`;
+  const h2List = llmData?.recommendedH2s || [];
+  const faqList = llmData?.recommendedFaqs || [];
 
   const markdownContent = `# ${h1Title}
 
@@ -191,9 +205,67 @@ ${faqList.map((faq) => `### Q: ${faq.question}\n${faq.answerSnippet}`).join('\n\
           {/* Modal Body */}
           <div className="p-4 sm:p-6 overflow-y-auto space-y-6 flex-1 text-sm bg-slate-50/50">
             {isLoadingLlm ? (
-              <div className="p-10 text-center space-y-3 bg-white rounded-2xl border border-slate-200">
-                <Loader2 className="w-7 h-7 animate-spin text-blue-600 mx-auto" />
-                <p className="text-xs font-bold text-slate-700">Synthesizing SEO Content Architecture via DeepSeek AI...</p>
+              <div className="p-12 text-center space-y-3 bg-white rounded-2xl border border-slate-200">
+                <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto" />
+                <div className="space-y-1">
+                  <h4 className="font-extrabold text-sm text-slate-900">
+                    Synthesizing Genuine SEO Architecture...
+                  </h4>
+                  <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                    DeepSeek AI is analyzing live Google PAA search results and clustering authentic topical intent for &ldquo;{seed}&rdquo;.
+                  </p>
+                </div>
+              </div>
+            ) : llmError ? (
+              <div className="p-8 text-center space-y-4 bg-white rounded-2xl border border-rose-200 shadow-2xs">
+                <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">
+                  <AlertCircle className="w-6 h-6" />
+                </div>
+                <div className="space-y-1.5 max-w-md mx-auto">
+                  <h4 className="font-black text-sm text-slate-900">
+                    Unable to Generate AI Content Brief
+                  </h4>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    The AI generation service encountered an error (e.g. OpenRouter API key limit reached or network timeout).
+                  </p>
+                  <p className="text-[11px] font-mono text-rose-600 bg-rose-50 p-2 rounded-xl border border-rose-100 break-words">
+                    {llmError}
+                  </p>
+                </div>
+
+                <div className="pt-2 flex items-center justify-center gap-3">
+                  <button
+                    onClick={() => {
+                      setLlmError(null);
+                      setIsLoadingLlm(true);
+                      fetch('/api/content-brief', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ seed, keywords }),
+                      })
+                        .then((r) => r.json())
+                        .then((d) => {
+                          if (d.success && d.llmData) setLlmData(d.llmData);
+                          else setLlmError(d.error || 'Failed to generate');
+                        })
+                        .catch((e) => setLlmError(e.message))
+                        .finally(() => setIsLoadingLlm(false));
+                    }}
+                    className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer transition-colors"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Try Again</span>
+                  </button>
+                  <a
+                    href="https://openrouter.ai/settings/keys"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"
+                  >
+                    <span>Check OpenRouter Keys</span>
+                    <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
+                  </a>
+                </div>
               </div>
             ) : (
               <>
@@ -207,8 +279,8 @@ ${faqList.map((faq) => `### Q: ${faq.question}\n${faq.answerSnippet}`).join('\n\
                       </span>
                     </div>
                     {siteContext.discoveredUrlsCount > 0 && (
-                      <span className="text-[10px] font-mono font-bold bg-white text-blue-700 px-2 py-0.5 rounded border border-blue-200">
-                        {siteContext.discoveredUrlsCount} sitemap URLs
+                      <span className="text-[10px] font-mono font-bold bg-white text-blue-700 px-2 py-0.5 rounded border border-blue-200" title="Found in your website sitemap">
+                        {siteContext.discoveredUrlsCount} pages in your sitemap
                       </span>
                     )}
                   </div>
@@ -245,18 +317,20 @@ ${faqList.map((faq) => `### Q: ${faq.question}\n${faq.answerSnippet}`).join('\n\
                 </div>
 
                 {/* H2 Subheadings */}
-                <div className="space-y-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
-                    Recommended H2 Subheadings &amp; Outline
-                  </span>
-                  <div className="space-y-1.5">
-                    {h2List.map((h2, i) => (
-                      <div key={i} className="p-3 bg-white rounded-lg border border-slate-200 text-xs text-slate-900 font-bold">
-                        ## {h2}
-                      </div>
-                    ))}
+                {h2List.length > 0 && (
+                  <div className="space-y-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
+                      Recommended H2 Subheadings &amp; Outline
+                    </span>
+                    <div className="space-y-1.5">
+                      {h2List.map((h2, i) => (
+                        <div key={i} className="p-3 bg-white rounded-lg border border-slate-200 text-xs text-slate-900 font-bold">
+                          ## {h2}
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* FAQ Questions */}
                 {faqList.length > 0 && (
@@ -285,62 +359,64 @@ ${faqList.map((faq) => `### Q: ${faq.question}\n${faq.answerSnippet}`).join('\n\
           </div>
 
           {/* Modal Footer */}
-          <div className="p-4 bg-white border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setIsWriterOpen(true)}
-                className="px-3.5 py-2 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md transition-all cursor-pointer hover:scale-[1.02]"
-                title="Launch Autonomous Article Factory for this Brief"
-              >
-                <Flame className="w-4 h-4 text-amber-200" />
-                <span>Write Full Article</span>
-              </button>
+          {llmData && !llmError && (
+            <div className="p-4 bg-white border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setIsWriterOpen(true)}
+                  className="px-3.5 py-2 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md transition-all cursor-pointer hover:scale-[1.02]"
+                  title="Launch Autonomous Article Factory for this Brief"
+                >
+                  <Flame className="w-4 h-4 text-amber-200" />
+                  <span>Write Full Article</span>
+                </button>
 
-              <button
-                onClick={() => setIsGraderOpen(true)}
-                className="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-              >
-                <Gauge className="w-4 h-4 text-indigo-600" />
-                <span>Grade Page</span>
-              </button>
-            </div>
+                <button
+                  onClick={() => setIsGraderOpen(true)}
+                  className="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Gauge className="w-4 h-4 text-indigo-600" />
+                  <span>Grade Page</span>
+                </button>
+              </div>
 
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleSaveToSprint}
-                className="px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
-                title="Pin this brief to your Action Sprint Drawer"
-              >
-                {savedToSprint ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <BookmarkCheck className="w-3.5 h-3.5 text-blue-600" />}
-                <span>{savedToSprint ? 'Saved' : 'Save Brief'}</span>
-              </button>
-              <button
-                onClick={() => {
-                  const blob = new Blob([markdownContent], { type: 'text/markdown;charset=utf-8' });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url;
-                  a.download = `content-brief-${seed.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.md`;
-                  document.body.appendChild(a);
-                  a.click();
-                  document.body.removeChild(a);
-                  URL.revokeObjectURL(url);
-                }}
-                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
-                title="Download as Markdown file for Notion/Obsidian"
-              >
-                <FileText className="w-3.5 h-3.5 text-slate-600" />
-                <span>.md</span>
-              </button>
-              <button
-                onClick={handleCopyMarkdown}
-                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md cursor-pointer transition-colors"
-              >
-                {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-                <span>{copied ? 'Copied' : 'Copy'}</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleSaveToSprint}
+                  className="px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+                  title="Pin this brief to your Action Sprint Drawer"
+                >
+                  {savedToSprint ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <BookmarkCheck className="w-3.5 h-3.5 text-blue-600" />}
+                  <span>{savedToSprint ? 'Saved' : 'Save Brief'}</span>
+                </button>
+                <button
+                  onClick={() => {
+                    const blob = new Blob([markdownContent], { type: 'text/markdown;charset=utf-8' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `content-brief-${seed.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.md`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                  }}
+                  className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+                  title="Download as Markdown file for Notion/Obsidian"
+                >
+                  <FileText className="w-3.5 h-3.5 text-slate-600" />
+                  <span>.md</span>
+                </button>
+                <button
+                  onClick={handleCopyMarkdown}
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md cursor-pointer transition-colors"
+                >
+                  {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                  <span>{copied ? 'Copied' : 'Copy'}</span>
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
