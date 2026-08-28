@@ -45,6 +45,41 @@ export interface LlmCompetitorGapResponse {
   differentiationStrategy: string;
 }
 
+export async function generateOpenRouterRawText(
+  systemPrompt: string,
+  userPrompt: string,
+  temperature: number = 0.3
+): Promise<string> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) return '';
+
+  try {
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://google-keyword-dominator.vercel.app',
+        'X-Title': 'Google Keyword Dominator',
+      },
+      body: JSON.stringify({
+        model: OPENROUTER_MODEL,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        temperature,
+      }),
+    });
+
+    if (!res.ok) return '';
+    const data = await res.json();
+    return data.choices?.[0]?.message?.content?.trim() || '';
+  } catch {
+    return '';
+  }
+}
+
 async function callOpenRouterWithSearch(prompt: string, systemPrompt: string = 'You are an expert SEO strategist. Always output pure valid JSON without markdown wrapping.'): Promise<string | null> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {

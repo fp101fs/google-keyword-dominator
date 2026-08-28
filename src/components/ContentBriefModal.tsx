@@ -2,8 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { KeywordItem } from '@/lib/autocomplete';
-import { X, Copy, Check, FileText, Sparkles, HelpCircle, Layers, Gauge, Loader2, Globe, BookmarkCheck } from 'lucide-react';
+import { X, Copy, Check, FileText, Sparkles, HelpCircle, Layers, Gauge, Loader2, Globe, BookmarkCheck, Flame } from 'lucide-react';
 import { PageGraderDrawer } from './PageGraderDrawer';
+import { ArticleWriterModal } from './ArticleWriterModal';
 import { LlmBriefResponse } from '@/lib/llm';
 import { SiteContextProfile } from '@/lib/intelligence/site-context';
 import { saveSprintItem } from '@/lib/action-cart';
@@ -26,6 +27,7 @@ export const ContentBriefModal: React.FC<ContentBriefModalProps> = ({
   const [copied, setCopied] = useState(false);
   const [savedToSprint, setSavedToSprint] = useState(false);
   const [isGraderOpen, setIsGraderOpen] = useState(false);
+  const [isWriterOpen, setIsWriterOpen] = useState(false);
   const [isLoadingLlm, setIsLoadingLlm] = useState(false);
   const [llmData, setLlmData] = useState<LlmBriefResponse | null>(null);
   const [siteContext, setSiteContext] = useState<SiteContextProfile | null>(null);
@@ -283,14 +285,25 @@ ${faqList.map((faq) => `### Q: ${faq.question}\n${faq.answerSnippet}`).join('\n\
           </div>
 
           {/* Modal Footer */}
-          <div className="p-4 bg-white border-t border-slate-200 flex items-center justify-between">
-            <button
-              onClick={() => setIsGraderOpen(true)}
-              className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <Gauge className="w-4 h-4 text-indigo-600" />
-              <span>Grade Live Page (0-100 SEO)</span>
-            </button>
+          <div className="p-4 bg-white border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsWriterOpen(true)}
+                className="px-3.5 py-2 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md transition-all cursor-pointer hover:scale-[1.02]"
+                title="Launch Autonomous Article Factory for this Brief"
+              >
+                <Flame className="w-4 h-4 text-amber-200" />
+                <span>Write Full Article</span>
+              </button>
+
+              <button
+                onClick={() => setIsGraderOpen(true)}
+                className="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <Gauge className="w-4 h-4 text-indigo-600" />
+                <span>Grade Page</span>
+              </button>
+            </div>
 
             <div className="flex items-center gap-2">
               <button
@@ -299,7 +312,7 @@ ${faqList.map((faq) => `### Q: ${faq.question}\n${faq.answerSnippet}`).join('\n\
                 title="Pin this brief to your Action Sprint Drawer"
               >
                 {savedToSprint ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <BookmarkCheck className="w-3.5 h-3.5 text-blue-600" />}
-                <span>{savedToSprint ? 'Saved to Sprint' : 'Save to Sprint'}</span>
+                <span>{savedToSprint ? 'Saved' : 'Save Brief'}</span>
               </button>
               <button
                 onClick={() => {
@@ -313,18 +326,18 @@ ${faqList.map((faq) => `### Q: ${faq.question}\n${faq.answerSnippet}`).join('\n\
                   document.body.removeChild(a);
                   URL.revokeObjectURL(url);
                 }}
-                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
                 title="Download as Markdown file for Notion/Obsidian"
               >
                 <FileText className="w-3.5 h-3.5 text-slate-600" />
-                <span>Download .md</span>
+                <span>.md</span>
               </button>
               <button
                 onClick={handleCopyMarkdown}
                 className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md cursor-pointer transition-colors"
               >
                 {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-                <span>{copied ? 'Copied' : 'Copy Markdown'}</span>
+                <span>{copied ? 'Copied' : 'Copy'}</span>
               </button>
             </div>
           </div>
@@ -336,6 +349,23 @@ ${faqList.map((faq) => `### Q: ${faq.question}\n${faq.answerSnippet}`).join('\n\
         isOpen={isGraderOpen}
         onClose={() => setIsGraderOpen(false)}
         targetKeyword={seed}
+      />
+
+      {/* Autonomous Article Writer Modal */}
+      <ArticleWriterModal
+        seed={seed}
+        isOpen={isWriterOpen}
+        onClose={() => setIsWriterOpen(false)}
+        siteContext={
+          siteContext
+            ? {
+                siteName: siteContext.siteName,
+                businessType: siteContext.businessType,
+                targetAudience: siteContext.targetAudience,
+              }
+            : undefined
+        }
+        suggestedOutline={h2List}
       />
     </>
   );

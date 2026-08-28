@@ -225,7 +225,7 @@ export const ContentGapModal: React.FC<ContentGapModalProps> = ({
                     {llmStrategy.highOpportunitySubtopics.length > 0 && (
                       <div className="pt-2 flex items-center gap-1.5 flex-wrap">
                         <span className="text-[11px] font-bold text-slate-500">Uncovered Angles:</span>
-                        {llmStrategy.highOpportunitySubtopics.map((sub, i) => (
+                        {llmStrategy.highOpportunitySubtopics.map((sub: string, i: number) => (
                           <span
                             key={i}
                             className="text-[10px] font-semibold bg-white text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-md"
