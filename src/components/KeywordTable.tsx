@@ -3,7 +3,8 @@
 import React, { useState, useMemo } from 'react';
 import { KeywordItem } from '@/lib/autocomplete';
 import { ExportButton } from './ExportButton';
-import { ArrowUpDown, ArrowUp, ArrowDown, ExternalLink, HelpCircle, Copy, Check } from 'lucide-react';
+import { ArrowUpDown, ArrowUp, ArrowDown, ExternalLink, HelpCircle, Copy, Check, FileText } from 'lucide-react';
+import { INTENT_DEFINITIONS } from '@/lib/intent';
 
 interface KeywordTableProps {
   seed: string;
@@ -11,9 +12,10 @@ interface KeywordTableProps {
   country: string;
   language: string;
   totalBeforeFiltering: number;
+  onOpenContentBrief?: () => void;
 }
 
-type SortField = 'keyword' | 'seedKeyword' | 'source' | 'country' | 'ap' | 'diff' | 'hot' | 'relativeScore' | 'wordCount';
+type SortField = 'keyword' | 'seedKeyword' | 'source' | 'country' | 'ap' | 'diff' | 'hot' | 'relativeScore' | 'intent' | 'wordCount';
 type SortDirection = 'asc' | 'desc';
 
 export const KeywordTable: React.FC<KeywordTableProps> = ({
@@ -22,6 +24,7 @@ export const KeywordTable: React.FC<KeywordTableProps> = ({
   country,
   language,
   totalBeforeFiltering,
+  onOpenContentBrief,
 }) => {
   const [sortField, setSortField] = useState<SortField>('relativeScore');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
@@ -62,6 +65,8 @@ export const KeywordTable: React.FC<KeywordTableProps> = ({
         comparison = diffOrder[a.diff] - diffOrder[b.diff];
       } else if (sortField === 'hot') {
         comparison = hotOrder[a.hot] - hotOrder[b.hot];
+      } else if (sortField === 'intent') {
+        comparison = a.intent.localeCompare(b.intent);
       } else if (sortField === 'relativeScore') {
         comparison = a.relativeScore - b.relativeScore;
       } else if (sortField === 'wordCount') {
@@ -111,7 +116,7 @@ export const KeywordTable: React.FC<KeywordTableProps> = ({
         <div>
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
-              Genuine Google Data
+              Genuine Autocomplete Data
             </span>
             <span className="text-xs text-slate-500">
               Country: <strong className="text-slate-700 uppercase">{country}</strong> | Lang: <strong className="text-slate-700 uppercase">{language}</strong>
@@ -128,18 +133,31 @@ export const KeywordTable: React.FC<KeywordTableProps> = ({
           </h2>
         </div>
 
-        {/* Action / Export Buttons */}
-        <ExportButton
-          seed={seed}
-          keywords={sortedKeywords}
-          country={country}
-          language={language}
-        />
+        {/* Action / Export / Content Brief Buttons */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {onOpenContentBrief && (
+            <button
+              onClick={onOpenContentBrief}
+              disabled={keywords.length === 0}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg shadow-2xs transition-all disabled:opacity-50 cursor-pointer"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>Generate Content Brief</span>
+            </button>
+          )}
+
+          <ExportButton
+            seed={seed}
+            keywords={sortedKeywords}
+            country={country}
+            language={language}
+          />
+        </div>
       </div>
 
       {/* Data Table */}
       <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse min-w-[850px]">
+        <table className="w-full text-left border-collapse min-w-[950px]">
           <thead>
             <tr className="bg-slate-100/80 border-b border-slate-200 text-[11px] font-bold text-slate-600 uppercase tracking-wider select-none">
               {/* Keyword */}
@@ -163,8 +181,23 @@ export const KeywordTable: React.FC<KeywordTableProps> = ({
                 onClick={() => handleSort('seedKeyword')}
               >
                 <div className="flex items-center gap-1">
-                  <span>Seed Keyword</span>
+                  <span>Seed</span>
                   {sortField === 'seedKeyword' ? (
+                    sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-blue-600" /> : <ArrowDown className="w-3.5 h-3.5 text-blue-600" />
+                  ) : (
+                    <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 opacity-50" />
+                  )}
+                </div>
+              </th>
+
+              {/* Intent */}
+              <th
+                className="py-3 px-3 cursor-pointer hover:text-blue-600 transition-colors w-28 text-center"
+                onClick={() => handleSort('intent')}
+              >
+                <div className="flex items-center justify-center gap-1">
+                  <span>Intent</span>
+                  {sortField === 'intent' ? (
                     sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-blue-600" /> : <ArrowDown className="w-3.5 h-3.5 text-blue-600" />
                   ) : (
                     <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 opacity-50" />
@@ -194,7 +227,7 @@ export const KeywordTable: React.FC<KeywordTableProps> = ({
                 </div>
                 {activeTooltip === 'source' && (
                   <div className="absolute z-20 mt-1 p-2 bg-slate-900 text-white font-normal normal-case text-[10px] rounded shadow-lg max-w-xs">
-                    The query engine that surfaced this suggestion (Google Search, Alphabet expansion, Modifiers).
+                    The platform or query engine that surfaced this suggestion.
                   </div>
                 )}
               </th>
@@ -231,7 +264,7 @@ export const KeywordTable: React.FC<KeywordTableProps> = ({
                 </div>
                 {activeTooltip === 'ap' && (
                   <div className="absolute z-20 mt-1 p-2 bg-slate-900 text-white font-normal normal-case text-[10px] rounded shadow-lg max-w-xs text-left">
-                    <strong>Autocomplete Placement (AP):</strong> The exact rank position this keyword appeared at in Google autocomplete (1st, 2nd, 3rd, etc.).
+                    <strong>Autocomplete Placement (AP):</strong> The exact rank position this keyword appeared at in autocomplete (1st, 2nd, 3rd, etc.).
                   </div>
                 )}
               </th>
@@ -285,7 +318,7 @@ export const KeywordTable: React.FC<KeywordTableProps> = ({
                 </div>
                 {activeTooltip === 'hot' && (
                   <div className="absolute z-20 mt-1 p-2 bg-slate-900 text-white font-normal normal-case text-[10px] rounded shadow-lg max-w-xs text-left">
-                    <strong>Hot:</strong> Most popular, relevant, and top-ranking keywords in Google autocomplete. Lower AP indicates higher search prominence.
+                    <strong>Hot:</strong> Most popular and highest ranking keywords. Lower AP indicates higher search prominence.
                   </div>
                 )}
               </th>
@@ -312,7 +345,7 @@ export const KeywordTable: React.FC<KeywordTableProps> = ({
                 </div>
                 {activeTooltip === 'score' && (
                   <div className="absolute z-20 mt-1 right-4 p-2 bg-slate-900 text-white font-normal normal-case text-[10px] rounded shadow-lg max-w-xs text-left">
-                    <strong>Score:</strong> Relative popularity and frequency score calculated across this result set (0-100). Higher score indicates higher user query engagement.
+                    <strong>Score:</strong> Relative popularity and frequency score calculated across this result set (0-100).
                   </div>
                 )}
               </th>
@@ -335,8 +368,15 @@ export const KeywordTable: React.FC<KeywordTableProps> = ({
                 </td>
 
                 {/* Seed Keyword */}
-                <td className="py-3 px-3 text-xs text-slate-500 font-medium">
+                <td className="py-3 px-3 text-xs text-slate-500 font-medium truncate max-w-[120px]">
                   {item.seedKeyword}
+                </td>
+
+                {/* Intent Badge */}
+                <td className="py-3 px-3 text-center">
+                  <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold border ${INTENT_DEFINITIONS[item.intent]?.badgeClass || 'bg-slate-100'}`}>
+                    {INTENT_DEFINITIONS[item.intent]?.label || item.intent}
+                  </span>
                 </td>
 
                 {/* Source */}
@@ -391,7 +431,7 @@ export const KeywordTable: React.FC<KeywordTableProps> = ({
                       href={`https://www.google.com/search?q=${encodeURIComponent(item.keyword)}&gl=${country.toLowerCase()}&hl=${language}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      title="Open Google Search in new tab"
+                      title="Open Search in new tab"
                       className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                     >
                       <ExternalLink className="w-3.5 h-3.5" />

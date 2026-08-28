@@ -1,7 +1,8 @@
 'use client';
 
 import React from 'react';
-import { Search, X, Filter } from 'lucide-react';
+import { Search, X, Filter, Compass } from 'lucide-react';
+import { SearchIntent, INTENT_DEFINITIONS } from '@/lib/intent';
 
 export interface FilterState {
   search: string;
@@ -10,6 +11,7 @@ export interface FilterState {
   minScore: number;
   maxScore: number;
   selectedSource: string;
+  intent: SearchIntent;
 }
 
 interface KeywordFiltersProps {
@@ -35,6 +37,7 @@ export const KeywordFilters: React.FC<KeywordFiltersProps> = ({
       minScore: 0,
       maxScore: 100,
       selectedSource: 'all',
+      intent: 'all',
     });
   };
 
@@ -44,20 +47,22 @@ export const KeywordFilters: React.FC<KeywordFiltersProps> = ({
     filters.maxWords < 20 ||
     filters.minScore > 0 ||
     filters.maxScore < 100 ||
-    filters.selectedSource !== 'all';
+    filters.selectedSource !== 'all' ||
+    filters.intent !== 'all';
 
   return (
     <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-xs space-y-4">
+      {/* Header & Reset */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
         <div className="flex items-center gap-2">
           <div className="p-1.5 bg-blue-50 text-blue-600 rounded-lg">
             <Filter className="w-4 h-4" />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-slate-800">Filter Results</h3>
+            <h3 className="text-sm font-bold text-slate-800">Smart Filter &amp; Intent Clusters</h3>
             <p className="text-xs text-slate-500">
               Showing <span className="font-semibold text-blue-600">{filteredCount}</span> of{' '}
-              <span className="font-semibold text-slate-700">{totalResults}</span> real Google autocomplete keywords
+              <span className="font-semibold text-slate-700">{totalResults}</span> real autocomplete keywords
             </p>
           </div>
         </div>
@@ -73,7 +78,46 @@ export const KeywordFilters: React.FC<KeywordFiltersProps> = ({
         )}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* 2. Search Intent Quick Filter Tabs */}
+      <div className="space-y-1.5">
+        <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-1">
+          <Compass className="w-3.5 h-3.5 text-blue-600" />
+          Search Intent Clustering
+        </label>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => onChange({ ...filters, intent: 'all' })}
+            className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
+              filters.intent === 'all'
+                ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
+                : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+            }`}
+          >
+            All Intents
+          </button>
+          {(Object.keys(INTENT_DEFINITIONS) as (keyof typeof INTENT_DEFINITIONS)[]).map((intentKey) => {
+            const def = INTENT_DEFINITIONS[intentKey];
+            const isSelected = filters.intent === intentKey;
+            return (
+              <button
+                key={intentKey}
+                onClick={() => onChange({ ...filters, intent: intentKey })}
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
+                  isSelected
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                    : `${def.badgeClass} hover:opacity-90`
+                }`}
+                title={def.description}
+              >
+                {def.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Grid Controls */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-1">
         {/* Search within keywords */}
         <div>
           <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">

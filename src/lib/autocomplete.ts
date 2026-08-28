@@ -1,17 +1,20 @@
 import { getCountryByCode } from './countries';
 import { getLanguageByCode } from './languages';
+import { PlatformType } from './platforms';
+import { classifyIntent, SearchIntent } from './intent';
 
 export interface AutocompleteOptions {
   query: string;
   country?: string;
   language?: string;
+  platform?: PlatformType;
   timeoutMs?: number;
 }
 
 export interface AutocompleteResult {
   query: string;
   suggestions: string[];
-  source: 'google';
+  source: string;
   country: string;
   language: string;
   timestamp: number;
@@ -23,13 +26,14 @@ export type HotLevel = 'Hottest keyword' | 'Hot keyword' | 'Trending' | '-';
 export interface KeywordItem {
   keyword: string;
   seedKeyword: string;
-  source: string;       // Primary discovery source/query type (e.g. 'Google Search', 'Alphabet', 'Questions', etc.)
+  source: string;       // Primary discovery source (e.g. 'Google', 'YouTube', 'Amazon', 'Bing')
   country: string;
   ap: number;           // Autocomplete Placement rank (1 = 1st, 2 = 2nd, etc.)
   apFormatted: string;  // '1st', '2nd', '3rd', '4th', etc.
   diff: DifficultyLevel; // Difficulty level calculated mathematically
   hot: HotLevel;        // Hotness status
-  relativeScore: number; // Transparent score 0-100 (e.g., 97.59)
+  relativeScore: number; // Transparent score 0-100 (e.g. 97.59)
+  intent: Exclude<SearchIntent, 'all'>; // Intent classification (informational, commercial, etc.)
   wordCount: number;
   charCount: number;
   sources: string[];
@@ -62,7 +66,7 @@ export function formatAp(ap: number): string {
 }
 
 /**
- * Normalizes a raw string from Google autocomplete.
+ * Normalizes a raw string from autocomplete providers.
  */
 export function normalizeKeyword(text: string): string {
   if (!text) return '';
@@ -73,27 +77,80 @@ export function normalizeKeyword(text: string): string {
 }
 
 /**
- * Fetches genuine suggestions for a single query from Google's completion API.
+ * Fetches genuine suggestions for a single query from the chosen platform API.
  */
-export async function fetchGoogleSuggestions(options: AutocompleteOptions): Promise<string[]> {
-  const { query, country = 'US', language = 'en', timeoutMs = 8000 } = options;
+export async function fetchPlatformSuggestions(options: AutocompleteOptions): Promise<string[]> {
+  const { query, country = 'US', language = 'en', platform = 'google', timeoutMs = 8000 } = options;
   const trimmed = query.trim();
   if (!trimmed) return [];
 
   const countryObj = getCountryByCode(country);
   const langObj = getLanguageByCode(language);
-
-  // Use Google's public complete endpoint with chrome client for richer suggestion lists and metadata
-  const url = new URL('https://suggestqueries.google.com/complete/search');
-  url.searchParams.set('client', 'chrome');
-  url.searchParams.set('q', trimmed);
-  url.searchParams.set('gl', countryObj.gl);
-  url.searchParams.set('hl', langObj.hl);
-
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
+    if (platform === 'youtube') {
+      const url = new URL('https://suggestqueries.google.com/complete/search');
+      url.searchParams.set('client', 'firefox');
+      url.searchParams.set('ds', 'yt');
+      url.searchParams.set('q', trimmed);
+      url.searchParams.set('gl', countryObj.gl);
+      url.searchParams.set('hl', langObj.hl);
+
+      const res = await fetch(url.toString(), {
+        signal: controller.signal,
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+      });
+      if (!res.ok) throw new Error(`YouTube Suggest returned ${res.status}`);
+      const data = await res.json();
+      if (Array.isArray(data) && Array.isArray(data[1])) {
+        return (data[1] as unknown[]).filter((x): x is string => typeof x === 'string').map(normalizeKeyword).filter(Boolean);
+      }
+      return [];
+    }
+
+    if (platform === 'amazon') {
+      const url = new URL('https://completion.amazon.com/api/2017/suggestions');
+      url.searchParams.set('mid', 'ATVPDKIKX0DER');
+      url.searchParams.set('alias', 'aps');
+      url.searchParams.set('prefix', trimmed);
+
+      const res = await fetch(url.toString(), {
+        signal: controller.signal,
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+      });
+      if (!res.ok) throw new Error(`Amazon Suggest returned ${res.status}`);
+      const data = await res.json();
+      if (data && Array.isArray(data.suggestions)) {
+        return data.suggestions.map((s: { value: string }) => normalizeKeyword(s.value)).filter(Boolean);
+      }
+      return [];
+    }
+
+    if (platform === 'bing') {
+      const url = new URL('https://api.bing.com/osjson.aspx');
+      url.searchParams.set('query', trimmed);
+
+      const res = await fetch(url.toString(), {
+        signal: controller.signal,
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+      });
+      if (!res.ok) throw new Error(`Bing Suggest returned ${res.status}`);
+      const data = await res.json();
+      if (Array.isArray(data) && Array.isArray(data[1])) {
+        return (data[1] as unknown[]).filter((x): x is string => typeof x === 'string').map(normalizeKeyword).filter(Boolean);
+      }
+      return [];
+    }
+
+    // Default: Google Search (client=chrome)
+    const url = new URL('https://suggestqueries.google.com/complete/search');
+    url.searchParams.set('client', 'chrome');
+    url.searchParams.set('q', trimmed);
+    url.searchParams.set('gl', countryObj.gl);
+    url.searchParams.set('hl', langObj.hl);
+
     const res = await fetch(url.toString(), {
       signal: controller.signal,
       headers: {
@@ -115,9 +172,7 @@ export async function fetchGoogleSuggestions(options: AutocompleteOptions): Prom
       for (const item of rawList) {
         if (typeof item === 'string') {
           const norm = normalizeKeyword(item);
-          if (norm.length > 0) {
-            suggestions.push(norm);
-          }
+          if (norm.length > 0) suggestions.push(norm);
         }
       }
       return suggestions;
@@ -135,13 +190,13 @@ export async function fetchGoogleSuggestions(options: AutocompleteOptions): Prom
 }
 
 export interface BatchKeywordRequest {
-  seed: string;
+  seeds: string[]; // Supports multiple seeds for bulk search
   country: string;
   language: string;
+  platform?: PlatformType;
   includeAlphabet?: boolean;
   includeQuestions?: boolean;
   includePrepositions?: boolean;
-  maxResults?: number;
 }
 
 const ALPHABET = 'abcdefghijklmnopqrstuvwxyz'.split('');
@@ -150,8 +205,7 @@ const QUESTION_PREFIXES = ['how', 'what', 'why', 'where', 'who', 'when', 'can', 
 const PREPOSITIONS = ['for', 'with', 'without', 'to', 'in', 'near', 'on', 'like', 'under', 'vs'];
 
 /**
- * Retrieves genuine keyword suggestions with controlled concurrency and deduplication.
- * NEVER fabricates data: returns only what Google returned.
+ * Retrieves genuine keyword suggestions with controlled concurrency and deduplication across single or multiple seeds.
  */
 export async function getExpandedKeywords(
   req: BatchKeywordRequest,
@@ -161,8 +215,8 @@ export async function getExpandedKeywords(
   metrics: KeywordSummaryMetrics;
   totalQueriesExecuted: number;
 }> {
-  const seed = normalizeKeyword(req.seed);
-  if (!seed) {
+  const cleanSeeds = req.seeds.map(normalizeKeyword).filter(Boolean);
+  if (cleanSeeds.length === 0) {
     return {
       keywords: [],
       metrics: {
@@ -178,41 +232,47 @@ export async function getExpandedKeywords(
     };
   }
 
-  // Construct legitimate subqueries
-  const subqueries: { query: string; source: string; category: string }[] = [];
+  const platformName = req.platform
+    ? req.platform.charAt(0).toUpperCase() + req.platform.slice(1)
+    : 'Google';
 
-  // 1. Root query
-  subqueries.push({ query: seed, source: 'seed', category: 'Google' });
+  // Construct subqueries across all seeds
+  const subqueries: { query: string; source: string; category: string; seedOrigin: string }[] = [];
 
-  // 2. Specific expansion toggles
-  if (req.includeAlphabet) {
-    for (const char of ALPHABET) {
-      subqueries.push({ query: `${seed} ${char}`, source: `suffix-${char}`, category: 'Alphabet' });
-    }
-    for (const num of NUMBERS) {
-      subqueries.push({ query: `${seed} ${num}`, source: `suffix-${num}`, category: 'Numbers' });
-    }
-  }
+  for (const seed of cleanSeeds) {
+    // 1. Root query
+    subqueries.push({ query: seed, source: 'seed', category: platformName, seedOrigin: seed });
 
-  if (req.includeQuestions) {
-    for (const q of QUESTION_PREFIXES) {
-      subqueries.push({ query: `${q} ${seed}`, source: `question-${q}`, category: 'Questions' });
+    // 2. Specific expansion toggles
+    if (req.includeAlphabet) {
+      for (const char of ALPHABET) {
+        subqueries.push({ query: `${seed} ${char}`, source: `suffix-${char}`, category: 'Alphabet', seedOrigin: seed });
+      }
+      for (const num of NUMBERS) {
+        subqueries.push({ query: `${seed} ${num}`, source: `suffix-${num}`, category: 'Numbers', seedOrigin: seed });
+      }
     }
-  }
 
-  if (req.includePrepositions) {
-    for (const prep of PREPOSITIONS) {
-      subqueries.push({ query: `${seed} ${prep}`, source: `prep-${prep}`, category: 'Prepositions' });
+    if (req.includeQuestions) {
+      for (const q of QUESTION_PREFIXES) {
+        subqueries.push({ query: `${q} ${seed}`, source: `question-${q}`, category: 'Questions', seedOrigin: seed });
+      }
     }
-  }
 
-  // 3. Default deep discovery: If no specific option is toggled, query alphabet & top modifiers
-  if (!req.includeAlphabet && !req.includeQuestions && !req.includePrepositions) {
-    for (const char of ALPHABET) {
-      subqueries.push({ query: `${seed} ${char}`, source: `alpha-${char}`, category: 'Alphabet' });
+    if (req.includePrepositions) {
+      for (const prep of PREPOSITIONS) {
+        subqueries.push({ query: `${seed} ${prep}`, source: `prep-${prep}`, category: 'Prepositions', seedOrigin: seed });
+      }
     }
-    for (const q of ['how to', 'best', 'for', 'with', 'vs']) {
-      subqueries.push({ query: `${q} ${seed}`, source: `mod-${q}`, category: 'Modifier' });
+
+    // 3. Default deep discovery: Alphabet + top modifiers
+    if (!req.includeAlphabet && !req.includeQuestions && !req.includePrepositions) {
+      for (const char of ALPHABET) {
+        subqueries.push({ query: `${seed} ${char}`, source: `alpha-${char}`, category: 'Alphabet', seedOrigin: seed });
+      }
+      for (const q of ['how to', 'best', 'for', 'with', 'vs']) {
+        subqueries.push({ query: `${q} ${seed}`, source: `mod-${q}`, category: 'Modifier', seedOrigin: seed });
+      }
     }
   }
 
@@ -222,9 +282,10 @@ export async function getExpandedKeywords(
     string,
     {
       keyword: string;
+      seedOrigin: string;
       sources: Set<string>;
       categories: Set<string>;
-      minRank: number; // 0-indexed position in Google's autocomplete list
+      minRank: number;
       occurrences: number;
     }
   >();
@@ -234,12 +295,13 @@ export async function getExpandedKeywords(
   for (let i = 0; i < subqueries.length; i += CONCURRENCY) {
     const batch = subqueries.slice(i, i + CONCURRENCY);
     await Promise.all(
-      batch.map(async ({ query, source, category }) => {
+      batch.map(async ({ query, source, category, seedOrigin }) => {
         try {
-          const suggestions = await fetchGoogleSuggestions({
+          const suggestions = await fetchPlatformSuggestions({
             query,
             country: req.country,
             language: req.language,
+            platform: req.platform || 'google',
             timeoutMs: 6000,
           });
 
@@ -254,6 +316,7 @@ export async function getExpandedKeywords(
             } else {
               resultMap.set(key, {
                 keyword: kw,
+                seedOrigin,
                 sources: new Set([source]),
                 categories: new Set([category]),
                 minRank: rank,
@@ -262,7 +325,7 @@ export async function getExpandedKeywords(
             }
           });
         } catch {
-          // If an individual subquery fails or is rate-limited, skip without manufacturing data
+          // Skip failures honestly without fabricating
         } finally {
           completed++;
           if (onProgress) {
@@ -284,18 +347,13 @@ export async function getExpandedKeywords(
     const words = entry.keyword.split(/\s+/).filter(Boolean);
     const wordCount = words.length;
     const charCount = entry.keyword.length;
-    const ap = entry.minRank + 1; // 1-indexed Autocomplete Placement (1st, 2nd, ...)
+    const ap = entry.minRank + 1; // 1-indexed Autocomplete Placement
 
-    // Transparent Relative Score Calculation (0-100):
-    // 60% weight from discovery frequency across subqueries, 40% weight from AP position
     const occurrenceFactor = (entry.occurrences / maxOccurrences) * 60;
     const rankFactor = Math.max(0, (15 - entry.minRank) / 15) * 40;
     const rawScore = occurrenceFactor + rankFactor;
-    // Format to 2 decimal places or rounded cleanly
     const relativeScore = Number(Math.min(100, Math.max(1, rawScore)).toFixed(2));
 
-    // Calculate Difficulty (Diff) based on competition level:
-    // Higher AP (1-3) + shorter word count + high score = High competition / difficulty
     let diff: DifficultyLevel = 'Med';
     if (relativeScore >= 75 || (ap <= 2 && wordCount <= 2)) {
       diff = 'High';
@@ -303,8 +361,6 @@ export async function getExpandedKeywords(
       diff = 'Low';
     }
 
-    // Calculate Hot status:
-    // Hot keywords are the most popular / highest ranking terms in autocomplete (AP <= 3 or score >= 85)
     let hot: HotLevel = '-';
     if (relativeScore >= 90 || (ap === 1 && entry.sources.has('seed'))) {
       hot = 'Hottest keyword';
@@ -314,11 +370,12 @@ export async function getExpandedKeywords(
       hot = 'Trending';
     }
 
-    const primaryCategory = Array.from(entry.categories)[0] || 'Google';
+    const primaryCategory = Array.from(entry.categories)[0] || platformName;
+    const intent = classifyIntent(entry.keyword);
 
     return {
       keyword: entry.keyword,
-      seedKeyword: seed,
+      seedKeyword: entry.seedOrigin,
       source: primaryCategory,
       country: req.country.toUpperCase(),
       ap,
@@ -326,6 +383,7 @@ export async function getExpandedKeywords(
       diff,
       hot,
       relativeScore,
+      intent,
       wordCount,
       charCount,
       sources: Array.from(entry.sources),
@@ -335,7 +393,6 @@ export async function getExpandedKeywords(
   // Default sort by relativeScore descending
   keywords.sort((a, b) => b.relativeScore - a.relativeScore);
 
-  // Compute container summary metrics
   const totalKeywords = keywords.length;
   const hotKeywordsCount = keywords.filter((k) => k.hot === 'Hottest keyword' || k.hot === 'Hot keyword').length;
   const avgScore = totalKeywords > 0
@@ -361,7 +418,7 @@ export async function getExpandedKeywords(
       avgAp,
       apLte3Count,
       difficultyBreakdown,
-      seedCount: 1,
+      seedCount: cleanSeeds.length,
     },
     totalQueriesExecuted: completed,
   };

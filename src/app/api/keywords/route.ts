@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getExpandedKeywords, normalizeKeyword } from '@/lib/autocomplete';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { PlatformType } from '@/lib/platforms';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -11,21 +12,21 @@ export async function GET(req: NextRequest) {
     const query = searchParams.get('q') || '';
     const country = searchParams.get('country') || 'US';
     const language = searchParams.get('language') || 'en';
+    const platform = (searchParams.get('platform') || 'google') as PlatformType;
     const alphabet = searchParams.get('alphabet') === 'true';
     const questions = searchParams.get('questions') === 'true';
     const prepositions = searchParams.get('prepositions') === 'true';
 
-    const normalized = normalizeKeyword(query);
-    if (!normalized) {
+    // Support comma or newline delimited multi-seed queries
+    const seeds = query
+      .split(/[,\n]/)
+      .map(normalizeKeyword)
+      .filter(Boolean)
+      .slice(0, 5); // limit up to 5 seeds in one batch for performance & rate limits
+
+    if (seeds.length === 0) {
       return NextResponse.json(
         { error: 'Seed query cannot be empty.' },
-        { status: 400 }
-      );
-    }
-
-    if (normalized.length > 100) {
-      return NextResponse.json(
-        { error: 'Seed query exceeds maximum length of 100 characters.' },
         { status: 400 }
       );
     }
@@ -51,11 +52,12 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Fetch genuine autocomplete suggestions
+    // Fetch genuine autocomplete suggestions across platforms and seeds
     const { keywords, metrics, totalQueriesExecuted } = await getExpandedKeywords({
-      seed: normalized,
+      seeds,
       country,
       language,
+      platform,
       includeAlphabet: alphabet,
       includeQuestions: questions,
       includePrepositions: prepositions,
@@ -63,7 +65,8 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(
       {
-        seed: normalized,
+        seeds,
+        platform,
         country,
         language,
         total: keywords.length,

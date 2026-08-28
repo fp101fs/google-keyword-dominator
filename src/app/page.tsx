@@ -5,17 +5,20 @@ import { SearchForm, SearchParams } from '@/components/SearchForm';
 import { SummaryContainers } from '@/components/SummaryContainers';
 import { KeywordFilters, FilterState } from '@/components/KeywordFilters';
 import { KeywordTable } from '@/components/KeywordTable';
+import { VisualSearchTree } from '@/components/VisualSearchTree';
+import { ContentBriefModal } from '@/components/ContentBriefModal';
 import { LoadingState } from '@/components/LoadingState';
 import { EmptyState } from '@/components/EmptyState';
 import { FAQ } from '@/components/FAQ';
 import { KeywordItem, KeywordSummaryMetrics } from '@/lib/autocomplete';
-import { Sparkles, ShieldCheck, Globe, Zap, AlertCircle } from 'lucide-react';
+import { Sparkles, ShieldCheck, Globe, Zap, AlertCircle, Network, TableProperties } from 'lucide-react';
 
 export default function Home() {
   const [activeParams, setActiveParams] = useState<SearchParams>({
     query: '',
     country: 'US',
     language: 'en',
+    platform: 'google',
     alphabet: false,
     questions: false,
     prepositions: false,
@@ -26,6 +29,8 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState<boolean>(false);
+  const [activeView, setActiveView] = useState<'table' | 'tree'>('table');
+  const [isBriefOpen, setIsBriefOpen] = useState<boolean>(false);
 
   const [filters, setFilters] = useState<FilterState>({
     search: '',
@@ -34,6 +39,7 @@ export default function Home() {
     minScore: 0,
     maxScore: 100,
     selectedSource: 'all',
+    intent: 'all',
   });
 
   const handleSearch = async (params: SearchParams) => {
@@ -47,6 +53,7 @@ export default function Home() {
       url.searchParams.set('q', params.query);
       url.searchParams.set('country', params.country);
       url.searchParams.set('language', params.language);
+      url.searchParams.set('platform', params.platform);
       if (params.alphabet) url.searchParams.set('alphabet', 'true');
       if (params.questions) url.searchParams.set('questions', 'true');
       if (params.prepositions) url.searchParams.set('prepositions', 'true');
@@ -61,7 +68,6 @@ export default function Home() {
       setKeywords(data.keywords || []);
       setMetrics(data.metrics || null);
 
-      // Reset filter on new search
       setFilters({
         search: '',
         minWords: 0,
@@ -69,6 +75,7 @@ export default function Home() {
         minScore: 0,
         maxScore: 100,
         selectedSource: 'all',
+        intent: 'all',
       });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'An unexpected error occurred while searching.';
@@ -99,18 +106,17 @@ export default function Home() {
   // Apply filters
   const filteredKeywords = useMemo(() => {
     return keywords.filter((item) => {
-      // 1. Text filter
       if (filters.search && !item.keyword.toLowerCase().includes(filters.search.toLowerCase())) {
         return false;
       }
-      // 2. Word count
+      if (filters.intent !== 'all' && item.intent !== filters.intent) {
+        return false;
+      }
       if (item.wordCount < filters.minWords) return false;
       if (filters.maxWords < 20 && item.wordCount > filters.maxWords) return false;
-      // 3. Score
       if (item.relativeScore < filters.minScore || item.relativeScore > filters.maxScore) {
         return false;
       }
-      // 4. Source
       if (filters.selectedSource !== 'all' && !item.sources.includes(filters.selectedSource)) {
         return false;
       }
@@ -138,7 +144,7 @@ export default function Home() {
       avgAp,
       apLte3Count: apLte3,
       difficultyBreakdown: diff,
-      seedCount: 1,
+      seedCount: metrics?.seedCount || 1,
     };
   }, [filteredKeywords, metrics]);
 
@@ -153,9 +159,9 @@ export default function Home() {
             </div>
             <div>
               <span className="font-extrabold text-lg text-slate-900 tracking-tight flex items-center gap-1.5">
-                Keyword Dominator <span className="text-xs bg-blue-100 text-blue-800 font-semibold px-2 py-0.5 rounded-full">Google Pro</span>
+                Keyword Dominator <span className="text-xs bg-blue-100 text-blue-800 font-semibold px-2 py-0.5 rounded-full">Pro Suite</span>
               </span>
-              <p className="text-[11px] text-slate-500 font-medium">Genuine Google Autocomplete Intelligence</p>
+              <p className="text-[11px] text-slate-500 font-medium">Multi-Platform Autocomplete &amp; Intent Intelligence</p>
             </div>
           </div>
 
@@ -174,13 +180,13 @@ export default function Home() {
         <section className="text-center space-y-3 max-w-3xl mx-auto">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-200/60 text-blue-700 text-xs font-bold tracking-wide uppercase">
             <Sparkles className="w-3.5 h-3.5" />
-            Free Google Keyword Research Tool
+            Universal Autocomplete Research Engine
           </div>
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-900 tracking-tight leading-tight">
-            Discover Real <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">Google Autocomplete</span> Keyword Ideas
+            Discover Real <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">Search Autocomplete</span> Ideas
           </h1>
           <p className="text-base sm:text-lg text-slate-600 leading-relaxed font-normal">
-            Generate authentic long-tail keyword suggestions directly from Google search completion endpoints. Target any country or language, explore wildcards (*), and expand with A-Z modifiers.
+            Generate authentic long-tail keyword suggestions from Google, YouTube, Amazon &amp; Bing. Uncover search intent, explore interactive relationship trees, and export ready-to-rank content briefs.
           </p>
         </section>
 
@@ -236,23 +242,66 @@ export default function Home() {
               {/* Top 7 Summary Metrics Containers in 1 Row */}
               {liveMetrics && <SummaryContainers metrics={liveMetrics} />}
 
-              {/* Filtering Toolbar */}
-              <KeywordFilters
-                filters={filters}
-                onChange={setFilters}
-                availableSources={availableSources}
-                totalResults={keywords.length}
-                filteredCount={filteredKeywords.length}
-              />
+              {/* View Switcher Bar (Table vs Visual Graph) */}
+              <div className="flex items-center justify-between gap-3 bg-white p-2 rounded-xl border border-slate-200 shadow-2xs">
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setActiveView('table')}
+                    className={`flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      activeView === 'table'
+                        ? 'bg-slate-900 text-white shadow-xs'
+                        : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <TableProperties className="w-3.5 h-3.5" />
+                    <span>Keyword Table View</span>
+                  </button>
+                  <button
+                    onClick={() => setActiveView('tree')}
+                    className={`flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      activeView === 'tree'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Network className="w-3.5 h-3.5" />
+                    <span>Visual Search Tree</span>
+                  </button>
+                </div>
 
-              {/* Data Table */}
-              <KeywordTable
-                seed={activeParams.query}
-                keywords={filteredKeywords}
-                country={activeParams.country}
-                language={activeParams.language}
-                totalBeforeFiltering={keywords.length}
-              />
+                <div className="text-xs text-slate-500 font-medium hidden sm:block">
+                  Showing results for: <strong className="text-slate-800">{activeParams.query}</strong>
+                </div>
+              </div>
+
+              {activeView === 'table' ? (
+                <>
+                  {/* Filtering Toolbar */}
+                  <KeywordFilters
+                    filters={filters}
+                    onChange={setFilters}
+                    availableSources={availableSources}
+                    totalResults={keywords.length}
+                    filteredCount={filteredKeywords.length}
+                  />
+
+                  {/* Data Table */}
+                  <KeywordTable
+                    seed={activeParams.query}
+                    keywords={filteredKeywords}
+                    country={activeParams.country}
+                    language={activeParams.language}
+                    totalBeforeFiltering={keywords.length}
+                    onOpenContentBrief={() => setIsBriefOpen(true)}
+                  />
+                </>
+              ) : (
+                /* Visual Keyword Graph / Tree */
+                <VisualSearchTree
+                  seed={activeParams.query}
+                  keywords={filteredKeywords}
+                />
+              )}
             </div>
           )}
         </section>
@@ -264,7 +313,7 @@ export default function Home() {
               Why SEO Pros Rely on Autocomplete Intelligence
             </h2>
             <p className="text-sm text-slate-500">
-              Google Autocomplete represents actual user searches typed into the search engine in real time.
+              Autocomplete represents actual searches typed into major platforms in real time.
             </p>
           </div>
 
@@ -273,9 +322,9 @@ export default function Home() {
               <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
                 <Globe className="w-5 h-5" />
               </div>
-              <h3 className="text-base font-bold text-slate-900">Multi-Country &amp; Multi-Language</h3>
+              <h3 className="text-base font-bold text-slate-900">Multi-Platform Search</h3>
               <p className="text-sm text-slate-600 leading-relaxed">
-                Target localized Google search markets across US, UK, Canada, Australia, France, Germany, Japan, and more with exact language code matching.
+                Seamlessly toggle between Google, YouTube, Amazon, and Bing to capture cross-platform search and buyer intent.
               </p>
             </div>
 
@@ -283,9 +332,9 @@ export default function Home() {
               <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
                 <Sparkles className="w-5 h-5" />
               </div>
-              <h3 className="text-base font-bold text-slate-900">Wildcard (*) Search Queries</h3>
+              <h3 className="text-base font-bold text-slate-900">Search Intent &amp; Content Briefs</h3>
               <p className="text-sm text-slate-600 leading-relaxed">
-                Place asterisks anywhere inside your search phrase to let Google fill in the blanks with genuine high-converting search variations.
+                Automatically classify queries into Informational, Commercial, and Transactional intents, and generate 1-click SEO content outlines.
               </p>
             </div>
 
@@ -295,7 +344,7 @@ export default function Home() {
               </div>
               <h3 className="text-base font-bold text-slate-900">100% Data Integrity</h3>
               <p className="text-sm text-slate-600 leading-relaxed">
-                Zero fabricated search volume, zero hallucinated keywords, and zero fake competition scores. Every suggestion is 100% genuine Google data.
+                Zero fabricated search volume, zero hallucinated keywords, and zero fake metrics. Every suggestion is authentic completion data.
               </p>
             </div>
           </div>
@@ -307,17 +356,22 @@ export default function Home() {
         </section>
       </main>
 
+      {/* Content Brief Modal */}
+      <ContentBriefModal
+        seed={activeParams.query}
+        keywords={filteredKeywords}
+        isOpen={isBriefOpen}
+        onClose={() => setIsBriefOpen(false)}
+      />
+
       {/* Footer */}
       <footer className="border-t border-slate-200 bg-white py-8 mt-16 text-center text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 space-y-2">
           <p className="font-semibold text-slate-700">
-            Google Keyword Dominator &bull; Production Autocomplete Research Tool
+            Google Keyword Dominator &bull; Production Autocomplete Research Suite
           </p>
           <p>
             Built with Next.js, React, TypeScript, and Tailwind CSS. Deployable to Vercel.
-          </p>
-          <p className="text-slate-400">
-            Data sourced from authentic Google completion endpoints without synthesis or fabrication.
           </p>
         </div>
       </footer>
