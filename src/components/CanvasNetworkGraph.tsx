@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { KeywordItem } from '@/lib/autocomplete';
-import { Share2, Copy, Check, RefreshCw, ZoomIn, ZoomOut } from 'lucide-react';
+import { Share2, Check, RefreshCw, ZoomIn, ZoomOut } from 'lucide-react';
 
 interface CanvasNetworkGraphProps {
   seed: string;
@@ -31,14 +31,14 @@ interface Edge {
 export const CanvasNetworkGraph: React.FC<CanvasNetworkGraphProps> = ({ seed, keywords }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [hoveredNode, setHoveredNode] = useState<Node | null>(null);
-  const [copiedKeyword, setCopiedKeyword] = useState<string | null>(null);
+  const [copiedNotification, setCopiedNotification] = useState<string | null>(null);
   const [zoom, setZoom] = useState<number>(1);
   const animFrameId = useRef<number | null>(null);
 
-  // Limit to top 50 nodes to guarantee 60fps lightweight rendering without resource hogging
+  // Limit to top 50 keywords for ultra-smooth 60fps performance without CPU hogging
   const topKeywords = useMemo(() => keywords.slice(0, 50), [keywords]);
 
-  // Construct nodes and links
+  // Construct node-link hierarchy
   const { nodes, edges } = useMemo(() => {
     const nList: Node[] = [];
     const eList: Edge[] = [];
@@ -55,8 +55,8 @@ export const CanvasNetworkGraph: React.FC<CanvasNetworkGraphProps> = ({ seed, ke
       y: centerY,
       vx: 0,
       vy: 0,
-      radius: 20,
-      color: '#3b82f6', // blue
+      radius: 22,
+      color: '#2563eb', // blue-600
     });
 
     // 2. Hub Intent Nodes
@@ -82,7 +82,7 @@ export const CanvasNetworkGraph: React.FC<CanvasNetworkGraphProps> = ({ seed, ke
         y: iy,
         vx: 0,
         vy: 0,
-        radius: 14,
+        radius: 15,
         color: intentColors[intent] || '#94a3b8',
       });
 
@@ -110,7 +110,7 @@ export const CanvasNetworkGraph: React.FC<CanvasNetworkGraphProps> = ({ seed, ke
         y: ky,
         vx: 0,
         vy: 0,
-        radius: Math.max(5, Math.min(10, kw.wordCount * 1.5)),
+        radius: Math.max(6, Math.min(11, kw.wordCount * 1.6)),
         color: intentColors[kw.intent] || '#94a3b8',
         keywordData: kw,
       });
@@ -125,7 +125,7 @@ export const CanvasNetworkGraph: React.FC<CanvasNetworkGraphProps> = ({ seed, ke
     return { nodes: nList, edges: eList };
   }, [seed, topKeywords]);
 
-  // Bounded, lightweight force relaxation simulation on HTML5 Canvas
+  // Bounded force physics simulation on HTML5 Canvas (halts cleanly at 140 ticks = 0% CPU idle)
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -133,7 +133,7 @@ export const CanvasNetworkGraph: React.FC<CanvasNetworkGraphProps> = ({ seed, ke
     if (!ctx) return;
 
     let iteration = 0;
-    const maxIterations = 140; // Stop physics after 140 ticks to consume 0% idle CPU
+    const maxIterations = 140;
 
     const nodeMap = new Map<string, Node>();
     nodes.forEach((n) => nodeMap.set(n.id, n));
@@ -146,10 +146,9 @@ export const CanvasNetworkGraph: React.FC<CanvasNetworkGraphProps> = ({ seed, ke
       ctx.scale(zoom, zoom);
       ctx.translate(-canvas.width / 2, -canvas.height / 2);
 
-      // 1. Run gentle physics if iteration < maxIterations
+      // Run gentle physics if active
       if (iteration < maxIterations) {
         iteration++;
-        // Spring forces on edges
         edges.forEach((edge) => {
           const s = nodeMap.get(edge.source);
           const t = nodeMap.get(edge.target);
@@ -172,7 +171,6 @@ export const CanvasNetworkGraph: React.FC<CanvasNetworkGraphProps> = ({ seed, ke
           }
         });
 
-        // Repulsion between nodes
         for (let i = 0; i < nodes.length; i++) {
           for (let j = i + 1; j < nodes.length; j++) {
             const a = nodes[i];
@@ -197,7 +195,7 @@ export const CanvasNetworkGraph: React.FC<CanvasNetworkGraphProps> = ({ seed, ke
         }
       }
 
-      // 2. Draw Edges
+      // Draw Edges
       edges.forEach((edge) => {
         const s = nodeMap.get(edge.source);
         const t = nodeMap.get(edge.target);
@@ -210,14 +208,14 @@ export const CanvasNetworkGraph: React.FC<CanvasNetworkGraphProps> = ({ seed, ke
         ctx.stroke();
       });
 
-      // 3. Draw Nodes
+      // Draw Nodes
       nodes.forEach((node) => {
         ctx.beginPath();
         ctx.arc(node.x, node.y, node.radius, 0, 2 * Math.PI);
         ctx.fillStyle = node.color;
         ctx.fill();
         ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = node.type === 'seed' ? 2.5 : 1;
+        ctx.lineWidth = node.type === 'seed' ? 3 : node.type === 'intent' ? 2 : 1;
         ctx.stroke();
 
         // Node Label
@@ -243,28 +241,59 @@ export const CanvasNetworkGraph: React.FC<CanvasNetworkGraphProps> = ({ seed, ke
     };
   }, [nodes, edges, zoom]);
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const getNodeAtPosition = (e: React.MouseEvent<HTMLCanvasElement>): Node | null => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas) return null;
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
+
+    // Adjust for canvas pan and zoom
     const mouseX = (e.clientX - rect.left) * scaleX;
     const mouseY = (e.clientY - rect.top) * scaleY;
 
-    const hit = nodes.find((n) => {
-      const dx = n.x - mouseX;
-      const dy = n.y - mouseY;
-      return Math.sqrt(dx * dx + dy * dy) <= n.radius + 6;
-    });
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    const transformedX = (mouseX - centerX) / zoom + centerX;
+    const transformedY = (mouseY - centerY) / zoom + centerY;
 
-    setHoveredNode(hit || null);
+    return (
+      nodes.find((n) => {
+        const dx = n.x - transformedX;
+        const dy = n.y - transformedY;
+        return Math.sqrt(dx * dx + dy * dy) <= n.radius + 8;
+      }) || null
+    );
   };
 
-  const handleCopy = async (kw: string) => {
-    await navigator.clipboard.writeText(kw);
-    setCopiedKeyword(kw);
-    setTimeout(() => setCopiedKeyword(null), 1500);
+  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const hit = getNodeAtPosition(e);
+    setHoveredNode(hit);
+  };
+
+  const handleClick = async (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const hit = getNodeAtPosition(e);
+    if (!hit) return;
+
+    let textToCopy = '';
+    let notificationText = '';
+
+    if (hit.type === 'seed') {
+      textToCopy = seed;
+      notificationText = `Copied seed: "${seed}" to clipboard!`;
+    } else if (hit.type === 'intent') {
+      textToCopy = hit.label;
+      notificationText = `Copied intent cluster: "${hit.label}"!`;
+    } else if (hit.keywordData) {
+      textToCopy = hit.keywordData.keyword;
+      notificationText = `Copied keyword: "${hit.keywordData.keyword}"!`;
+    }
+
+    if (textToCopy) {
+      await navigator.clipboard.writeText(textToCopy);
+      setCopiedNotification(notificationText);
+      setTimeout(() => setCopiedNotification(null), 2500);
+    }
   };
 
   return (
@@ -279,11 +308,11 @@ export const CanvasNetworkGraph: React.FC<CanvasNetworkGraphProps> = ({ seed, ke
             <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
               Interactive Node-Link Network Graph
               <span className="text-xs bg-indigo-100 text-indigo-800 font-semibold px-2 py-0.5 rounded-full">
-                60fps Canvas Accelerated
+                60fps Canvas &bull; All Nodes Clickable
               </span>
             </h3>
             <p className="text-xs text-slate-500">
-              Hardware-accelerated network graph showing relationships between &quot;<strong>{seed}</strong>&quot;, intent hubs, and leaf long-tails.
+              Click <strong>any node</strong> (Root Seed, Intent Hubs, or Keyword Leafs) to instantly copy its text.
             </p>
           </div>
         </div>
@@ -321,35 +350,45 @@ export const CanvasNetworkGraph: React.FC<CanvasNetworkGraphProps> = ({ seed, ke
           width={800}
           height={500}
           onMouseMove={handleMouseMove}
-          onClick={() => hoveredNode?.keywordData && handleCopy(hoveredNode.keywordData.keyword)}
-          className="w-full aspect-[16/10] max-h-[480px] cursor-crosshair block"
+          onClick={handleClick}
+          className="w-full aspect-[16/10] max-h-[480px] cursor-pointer block"
         />
 
-        {/* Node Hover Card */}
-        {hoveredNode && hoveredNode.keywordData && (
-          <div className="absolute bottom-4 left-4 bg-slate-900/90 border border-slate-700 backdrop-blur-md rounded-xl p-3 text-white text-xs max-w-xs shadow-2xl space-y-1 animate-fadeIn">
+        {/* Global Copy Banner / Notification */}
+        {copiedNotification && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-emerald-600 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-2xl flex items-center gap-2 animate-fadeIn z-30 border border-emerald-400">
+            <Check className="w-4 h-4" />
+            <span>{copiedNotification}</span>
+          </div>
+        )}
+
+        {/* Hover Information Card */}
+        {hoveredNode && (
+          <div className="absolute bottom-4 left-4 bg-slate-900/95 border border-slate-700 backdrop-blur-md rounded-xl p-3 text-white text-xs max-w-xs shadow-2xl space-y-1 animate-fadeIn pointer-events-none z-20">
             <div className="flex items-center justify-between gap-2">
               <span className="font-bold text-sm text-blue-300 truncate">
-                {hoveredNode.keywordData.keyword}
+                {hoveredNode.label}
               </span>
-              <button
-                onClick={() => handleCopy(hoveredNode.keywordData!.keyword)}
-                className="p-1 hover:bg-slate-800 rounded text-slate-300 hover:text-white"
-              >
-                {copiedKeyword === hoveredNode.keywordData.keyword ? (
-                  <Check className="w-3.5 h-3.5 text-emerald-400" />
-                ) : (
-                  <Copy className="w-3.5 h-3.5" />
-                )}
-              </button>
+              <span className="text-[10px] bg-white/10 px-1.5 py-0.5 rounded text-emerald-300 font-mono">
+                Click to copy
+              </span>
             </div>
-            <div className="text-[10px] text-slate-400 flex items-center gap-2">
-              <span>Score: <strong className="text-white">{hoveredNode.keywordData.relativeScore}%</strong></span>
-              <span>&bull;</span>
-              <span>AP: <strong className="text-blue-300">{hoveredNode.keywordData.apFormatted}</strong></span>
-              <span>&bull;</span>
-              <span>Intent: <strong className="text-amber-300 capitalize">{hoveredNode.keywordData.intent}</strong></span>
-            </div>
+
+            {hoveredNode.type === 'seed' && (
+              <div className="text-[11px] text-slate-400">Root Seed Keyword for this research query.</div>
+            )}
+            {hoveredNode.type === 'intent' && (
+              <div className="text-[11px] text-slate-400">Intent Hub cluster connecting related terms.</div>
+            )}
+            {hoveredNode.keywordData && (
+              <div className="text-[10px] text-slate-400 flex items-center gap-2 pt-0.5">
+                <span>Score: <strong className="text-white">{hoveredNode.keywordData.relativeScore}%</strong></span>
+                <span>&bull;</span>
+                <span>AP: <strong className="text-blue-300">{hoveredNode.keywordData.apFormatted}</strong></span>
+                <span>&bull;</span>
+                <span>Diff: <strong className="text-amber-300">{hoveredNode.keywordData.diff}</strong></span>
+              </div>
+            )}
           </div>
         )}
       </div>
