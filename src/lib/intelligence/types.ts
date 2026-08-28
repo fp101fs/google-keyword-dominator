@@ -35,6 +35,13 @@ export interface PageExpansionPlan {
     suggestedHeading: string;
     type: 'section' | 'faq' | 'supporting_article';
   }[];
+  titleMetaRecommendation?: {
+    currentTitle: string;
+    recommendedTitle: string;
+    currentMeta: string;
+    recommendedMeta: string;
+    reason: string;
+  };
 }
 
 export interface RankingsRescueTask {

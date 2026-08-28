@@ -3,6 +3,7 @@ import { getValidAccessToken } from '@/lib/gsc/google-auth';
 import { getGscPropertySnapshot } from '@/lib/gsc/gsc-service';
 import { getGscDemoSnapshot } from '@/lib/gsc/demo-data';
 import { buildPageExpansionPlan } from '@/lib/intelligence/page-expansion';
+import { generateLlmPageTitleMeta } from '@/lib/llm';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,24 +24,38 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const targetUrl = targetPageUrl || snapshot.pages[0]?.url || 'https://example.com/top-page';
+    const targetUrl = targetPageUrl || snapshot.pages[0]?.url || 'https://example.com';
     const pageQueries = (snapshot.queries || []).filter(
-      (q) => !q.page || q.page.toLowerCase().includes(targetUrl.toLowerCase()) || true
+      (q) => !q.page || q.page === targetUrl || q.page.endsWith(targetUrl)
     );
 
     const plan = await buildPageExpansionPlan(
       targetUrl,
-      pageQueries.slice(0, 20),
+      pageQueries.length > 0 ? pageQueries : (snapshot.queries || []).slice(0, 10),
       country,
       language
     );
+
+    // Call LLM for genuine Title & Meta description recommendations
+    if (plan.currentQueries.length > 0) {
+      const llmTitleMeta = await generateLlmPageTitleMeta(targetUrl, plan.currentQueries);
+      if (llmTitleMeta) {
+        plan.titleMetaRecommendation = {
+          currentTitle: `${targetUrl.split('/').pop() || 'Page'}`,
+          recommendedTitle: llmTitleMeta.recommendedTitle,
+          currentMeta: '',
+          recommendedMeta: llmTitleMeta.recommendedMeta,
+          reason: llmTitleMeta.reason,
+        };
+      }
+    }
 
     return NextResponse.json({
       success: true,
       plan,
     });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Failed to generate page expansion plan';
+    const msg = err instanceof Error ? err.message : 'Failed to build page expansion plan';
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

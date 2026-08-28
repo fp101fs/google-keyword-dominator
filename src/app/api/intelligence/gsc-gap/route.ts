@@ -3,6 +3,7 @@ import { getValidAccessToken } from '@/lib/gsc/google-auth';
 import { getGscPropertySnapshot } from '@/lib/gsc/gsc-service';
 import { getGscDemoSnapshot } from '@/lib/gsc/demo-data';
 import { computeGscGapOpportunities } from '@/lib/intelligence/gap-engine';
+import { generateLlmGapAction } from '@/lib/llm';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,7 +18,6 @@ export async function POST(req: NextRequest) {
     } else {
       const token = await getValidAccessToken();
       if (!token) {
-        // Fallback to demo snapshot if token is missing
         snapshot = getGscDemoSnapshot();
       } else {
         snapshot = await getGscPropertySnapshot(token, siteUrl);
@@ -31,11 +31,31 @@ export async function POST(req: NextRequest) {
       language
     );
 
+    // Enhance top 3 opportunities with LLM strategic recommendations
+    const enhancedOpportunities = await Promise.all(
+      opportunities.map(async (op, idx) => {
+        if (idx < 3) {
+          const llmAction = await generateLlmGapAction(
+            op.query,
+            op.tierLabel,
+            op.position > 0 ? { position: op.position, impressions: op.impressions } : undefined
+          );
+          if (llmAction) {
+            return {
+              ...op,
+              recommendedAction: llmAction.actionDescription,
+            };
+          }
+        }
+        return op;
+      })
+    );
+
     return NextResponse.json({
       success: true,
       property: snapshot.property,
       totalGscQueries: snapshot.queries.length,
-      opportunities,
+      opportunities: enhancedOpportunities,
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Failed to analyze GSC gaps';
