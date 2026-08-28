@@ -21,6 +21,7 @@ import {
   LayoutGrid,
   List,
   Gauge,
+  BookmarkCheck,
 } from 'lucide-react';
 import { GscConnectedSnapshot, GscProperty } from '@/lib/gsc/types';
 import { GscGapOpportunity, PageExpansionPlan, RankingsRescueTask } from '@/lib/intelligence/types';
@@ -28,6 +29,7 @@ import { SearchOpportunityGraph, OpportunityAction } from '@/lib/intelligence/op
 import { OpportunityGraphVisualizer } from './OpportunityGraphVisualizer';
 import { ContentBriefModal } from './ContentBriefModal';
 import { PageGraderDrawer } from './PageGraderDrawer';
+import { saveSprintItem } from '@/lib/action-cart';
 
 interface SearchIntelligenceModalProps {
   isOpen: boolean;
@@ -72,6 +74,7 @@ export const SearchIntelligenceModal: React.FC<SearchIntelligenceModalProps> = (
   const [isLoadingExpansion, setIsLoadingExpansion] = useState<boolean>(false);
   const [selectedPageUrl, setSelectedPageUrl] = useState<string>('');
   const [discoveredSitemapUrls, setDiscoveredSitemapUrls] = useState<string[]>([]);
+  const [savedExpansionState, setSavedExpansionState] = useState<string | null>(null);
 
   // Rankings Rescue State
   const [rescueTasks, setRescueTasks] = useState<RankingsRescueTask[]>([]);
@@ -734,36 +737,67 @@ Evidence:
                       </div>
                     )}
 
-                    <div className="space-y-2">
-                      <h5 className="text-xs font-extrabold uppercase tracking-wider text-slate-700">
-                        Missing Subtopics to Add to Page ({expansionPlan.missingSubtopics.length})
-                      </h5>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {expansionPlan.missingSubtopics.map((sub, i) => (
-                          <div key={i} className="p-3.5 bg-white rounded-xl border border-slate-200 space-y-2 text-xs shadow-2xs flex flex-col justify-between">
-                            <div className="space-y-1">
-                              <div className="font-bold text-slate-900 flex items-center justify-between">
-                                <span>{sub.title}</span>
-                                <span className="text-[10px] bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded border border-emerald-200 uppercase font-mono">
-                                  {sub.type}
-                                </span>
-                              </div>
-                              <p className="text-slate-500 text-[11px]">
-                                Heading: <code className="text-blue-600 font-semibold">{sub.suggestedHeading}</code>
-                              </p>
-                            </div>
+                    {/* Actions Bar for Page Expansion (#Full Brief & Prompt) */}
+                    <div className="p-4 bg-white border border-emerald-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+                      <div>
+                        <span className="font-extrabold text-sm text-slate-900 block">
+                          Execute Expansion for this Page
+                        </span>
+                        <p className="text-xs text-slate-500">
+                          Generate a complete content brief or ready-to-use AI rewriting prompt targeting all {expansionPlan.missingSubtopics.length} missing subtopics.
+                        </p>
+                      </div>
 
-                            <div className="pt-2 border-t border-slate-100 flex items-center justify-end">
-                              <button
-                                onClick={() => setBriefSeed(sub.suggestedHeading || sub.title)}
-                                className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
-                              >
-                                <FileText className="w-3 h-3 text-emerald-600" />
-                                <span>1-Click Section Brief (#4)</span>
-                              </button>
-                            </div>
-                          </div>
-                        ))}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <button
+                          onClick={() => {
+                            const seedTopic = expansionPlan.titleMetaRecommendation?.recommendedTitle || expansionPlan.pageUrl.split('/').filter(Boolean).pop() || 'Topic Expansion';
+                            setBriefSeed(seedTopic);
+                          }}
+                          className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
+                        >
+                          <FileText className="w-3.5 h-3.5" />
+                          <span>Generate Full Brief</span>
+                        </button>
+
+                        <button
+                          onClick={async () => {
+                            const promptText = `Act as an expert SEO copywriter and editor.
+I want to expand and update our existing page: ${expansionPlan.pageUrl}
+
+TARGET TITLE: ${expansionPlan.titleMetaRecommendation?.recommendedTitle || 'N/A'}
+TARGET META: ${expansionPlan.titleMetaRecommendation?.recommendedMeta || 'N/A'}
+
+Please write high-quality, in-depth sections for each of the following missing subtopics and FAQs so our page becomes the most comprehensive topical authority in Google search:
+
+${expansionPlan.missingSubtopics.map((s, idx) => `### ${idx + 1}. [${s.type.toUpperCase()}] ${s.suggestedHeading || s.title}
+- Target Query: "${s.targetQuery}"
+- Content Focus: ${s.title}`).join('\n\n')}
+
+Include natural internal linking suggestions, practical examples, and schema-friendly FAQ answers.`;
+
+                            await navigator.clipboard.writeText(promptText);
+                            saveSprintItem({
+                              type: 'prompt_snippet',
+                              title: `Page Expansion Prompt: ${expansionPlan.pageUrl.split('/').filter(Boolean).pop() || 'Page'}`,
+                              subtitle: `${expansionPlan.missingSubtopics.length} missing subtopics to add`,
+                              content: promptText,
+                              metadata: { pageUrl: expansionPlan.pageUrl },
+                            });
+
+                            setSavedExpansionState('copied_prompt');
+                            setTimeout(() => setSavedExpansionState(null), 2500);
+                          }}
+                          className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
+                          title="Copy ready-to-use AI rewriting prompt & save to Action Sprint"
+                        >
+                          {savedExpansionState === 'copied_prompt' ? (
+                            <Check className="w-3.5 h-3.5 text-emerald-400" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5" />
+                          )}
+                          <span>{savedExpansionState === 'copied_prompt' ? 'Prompt Copied & Saved!' : 'Copy AI Prompt'}</span>
+                        </button>
                       </div>
                     </div>
                   </div>
