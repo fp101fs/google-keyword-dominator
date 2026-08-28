@@ -17,6 +17,7 @@ import { ContentBriefModal } from '@/components/ContentBriefModal';
 import { SerpInspectorDrawer } from '@/components/SerpInspectorDrawer';
 import { ContentGapModal } from '@/components/ContentGapModal';
 import { GscStrikingModal } from '@/components/GscStrikingModal';
+import { SearchIntelligenceModal } from '@/components/SearchIntelligenceModal';
 import { LoadingState } from '@/components/LoadingState';
 import { EmptyState } from '@/components/EmptyState';
 import { FAQ } from '@/components/FAQ';
@@ -65,6 +66,7 @@ export default function Home() {
   const [selectedProperty, setSelectedProperty] = useState<string>('');
   const [isAuthenticatedGsc, setIsAuthenticatedGsc] = useState<boolean>(false);
   const [isGscModalOpen, setIsGscModalOpen] = useState<boolean>(false);
+  const [isIntelligenceOpen, setIsIntelligenceOpen] = useState<boolean>(false);
   const [isLoadingGsc, setIsLoadingGsc] = useState<boolean>(false);
 
   // Modals & Drawers
@@ -143,6 +145,8 @@ export default function Home() {
       setIsBriefOpen(true);
     } else if (tab === 'gsc-striking') {
       setIsGscModalOpen(true);
+    } else if (tab === 'intelligence') {
+      setIsIntelligenceOpen(true);
     } else if (tab === 'serp-matrix') {
       setActiveView('serp');
     } else if (tab === 'explorer') {
@@ -312,6 +316,7 @@ export default function Home() {
         onOpenContentGap={() => setIsGapOpen(true)}
         onOpenContentBrief={() => setIsBriefOpen(true)}
         onOpenGscModal={() => setIsGscModalOpen(true)}
+        onOpenIntelligenceModal={() => setIsIntelligenceOpen(true)}
         gscSnapshot={gscSnapshot}
       />
 
@@ -327,7 +332,7 @@ export default function Home() {
             Discover Real <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">Search Autocomplete</span> Ideas
           </h1>
           <p className="text-base sm:text-lg text-slate-600 leading-relaxed font-normal">
-            Generate authentic long-tail keyword suggestions from Google, YouTube, Amazon &amp; Bing. Connect Google Search Console to prioritize striking distance Page-2 queries and export ready-to-rank content briefs.
+            Generate authentic long-tail keyword suggestions from Google, YouTube, Amazon &amp; Bing. Connect Google Search Console to prioritize striking distance Page-2 queries, expand existing pages, and automate rankings rescue.
           </p>
         </section>
 
@@ -626,6 +631,19 @@ export default function Home() {
           <FAQ />
         </section>
       </main>
+
+      {/* Autonomous Search Intelligence Suite Modal */}
+      <SearchIntelligenceModal
+        isOpen={isIntelligenceOpen}
+        onClose={() => setIsIntelligenceOpen(false)}
+        gscSnapshot={gscSnapshot}
+        properties={gscProperties}
+        selectedProperty={selectedProperty}
+        onSelectProperty={handleSelectProperty}
+        onExpandQueryInGkd={(q) => handleSuggestionClick(q)}
+        isAuthenticated={isAuthenticatedGsc}
+        onConnectDemo={handleConnectGscDemo}
+      />
 
       {/* GSC Striking Distance Modal */}
       <GscStrikingModal
