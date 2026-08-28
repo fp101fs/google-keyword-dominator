@@ -14,8 +14,12 @@ import {
   Copy,
   Check,
   CheckCircle2,
+  Download,
+  LayoutGrid,
+  List,
 } from 'lucide-react';
 import { SearchOpportunityGraph, OpportunityAction } from '@/lib/intelligence/opportunity-graph';
+import { OpportunityGraphVisualizer } from './OpportunityGraphVisualizer';
 import { ContentBriefModal } from './ContentBriefModal';
 import { PageGraderDrawer } from './PageGraderDrawer';
 import { KeywordItem } from '@/lib/autocomplete';
@@ -53,6 +57,7 @@ export const OpportunityGraphModal: React.FC<OpportunityGraphModalProps> = ({
 }) => {
   const [graph, setGraph] = useState<SearchOpportunityGraph | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [viewMode, setViewMode] = useState<'visual' | 'list'>('visual');
   const [selectedActionForWhy, setSelectedActionForWhy] = useState<OpportunityAction | null>(null);
   const [briefSeed, setBriefSeed] = useState<string | null>(null);
   const [graderKeyword, setGraderKeyword] = useState<string | null>(null);
@@ -77,6 +82,32 @@ export const OpportunityGraphModal: React.FC<OpportunityGraphModalProps> = ({
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleExportCsv = () => {
+    if (!graph || graph.actions.length === 0) return;
+
+    const headers = ['Rank', 'Action Type', 'Title', 'Target Query', 'Suggested Slug', 'Target URL', 'Estimated Impact', 'Confidence', 'Recommendation'];
+    const rows = graph.actions.map((act) => [
+      act.rank,
+      `"${act.actionLabel}"`,
+      `"${act.title.replace(/"/g, '""')}"`,
+      `"${act.targetQuery.replace(/"/g, '""')}"`,
+      `"${act.suggestedSlug || ''}"`,
+      `"${act.targetPageUrl || ''}"`,
+      `"${act.estimatedTrafficImpact}"`,
+      `"${act.evidence.confidence}"`,
+      `"${act.evidence.recommendation.replace(/"/g, '""')}"`,
+    ]);
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `next-100-wins-${siteUrl || 'domain'}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const handleCopyAction = async (action: OpportunityAction) => {
@@ -195,83 +226,125 @@ Evidence:
                   </div>
                 </div>
 
-                {/* Actions Table / List */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-extrabold uppercase tracking-wider text-slate-700">
-                      Prioritized Execution Plan (Top 100 Wins)
-                    </span>
-                    <span className="text-[11px] text-slate-500">
-                      Click <strong className="text-blue-600 font-bold">&quot;Why?&quot;</strong> to inspect full evidence chain
-                    </span>
+                {/* View Switcher & CSV Export Bar */}
+                <div className="flex items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs">
+                  <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                    <button
+                      onClick={() => setViewMode('visual')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                        viewMode === 'visual' ? 'bg-white text-blue-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <LayoutGrid className="w-3.5 h-3.5" />
+                      <span>Visual Matrix (#9)</span>
+                    </button>
+                    <button
+                      onClick={() => setViewMode('list')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                        viewMode === 'list' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <List className="w-3.5 h-3.5" />
+                      <span>Ranked List</span>
+                    </button>
                   </div>
 
+                  <button
+                    onClick={handleExportCsv}
+                    className="px-3.5 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                  >
+                    <Download className="w-3.5 h-3.5 text-slate-600" />
+                    <span>Export 100 Wins (CSV)</span>
+                  </button>
+                </div>
+
+                {/* Main Content Area */}
+                {viewMode === 'visual' ? (
+                  <OpportunityGraphVisualizer
+                    actions={graph.actions}
+                    siteUrl={siteUrl || 'domain.com'}
+                    onSelectAction={(act) => setSelectedActionForWhy(act)}
+                    onGenerateBrief={(seed) => setBriefSeed(seed)}
+                  />
+                ) : (
+                  /* Actions List */
                   <div className="space-y-2">
-                    {graph.actions.map((act) => (
-                      <div
-                        key={act.id}
-                        className="p-3.5 bg-white rounded-xl border border-slate-200 hover:border-blue-300 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs group"
-                      >
-                        {/* Action Details */}
-                        <div className="flex items-start gap-3 min-w-0">
-                          <span className="w-7 h-7 rounded-lg bg-slate-100 text-slate-700 font-black text-xs flex items-center justify-center shrink-0 border border-slate-200">
-                            #{act.rank}
-                          </span>
-                          <div className="min-w-0 space-y-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${act.actionBadgeClass}`}>
-                                {act.actionLabel}
-                              </span>
-                              <span className="text-xs font-bold text-slate-900 truncate">
-                                {act.title}
-                              </span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-extrabold uppercase tracking-wider text-slate-700">
+                        Prioritized Execution Plan (Top 100 Wins)
+                      </span>
+                      <span className="text-[11px] text-slate-500">
+                        Click <strong className="text-blue-600 font-bold">&quot;Why?&quot;</strong> to inspect full evidence chain
+                      </span>
+                    </div>
+
+                    <div className="space-y-2">
+                      {graph.actions.map((act) => (
+                        <div
+                          key={act.id}
+                          className="p-3.5 bg-white rounded-xl border border-slate-200 hover:border-blue-300 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs group"
+                        >
+                          {/* Action Details */}
+                          <div className="flex items-start gap-3 min-w-0">
+                            <span className="w-7 h-7 rounded-lg bg-slate-100 text-slate-700 font-black text-xs flex items-center justify-center shrink-0 border border-slate-200">
+                              #{act.rank}
+                            </span>
+                            <div className="min-w-0 space-y-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${act.actionBadgeClass}`}>
+                                  {act.actionLabel}
+                                </span>
+                                <span className="text-xs font-bold text-slate-900 truncate">
+                                  {act.title}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-500 truncate">
+                                Target Query: <code className="text-blue-600 font-semibold">{act.targetQuery}</code>
+                                {act.suggestedSlug && ` &bull; Slug: ${act.suggestedSlug}`}
+                              </p>
                             </div>
-                            <p className="text-[11px] text-slate-500 truncate">
-                              Target Query: <code className="text-blue-600 font-semibold">{act.targetQuery}</code>
-                              {act.suggestedSlug && ` &bull; Slug: ${act.suggestedSlug}`}
-                            </p>
+                          </div>
+
+                          {/* Right Actions & Impact */}
+                          <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                            <span className="text-xs font-mono font-black text-emerald-600 tracking-wider bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-200">
+                              {act.estimatedTrafficImpact}
+                            </span>
+
+                            <button
+                              onClick={() => setSelectedActionForWhy(act)}
+                              className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
+                            >
+                              <HelpCircle className="w-3.5 h-3.5 text-blue-600" />
+                              <span>Why?</span>
+                            </button>
+
+                            <button
+                              onClick={() => setBriefSeed(act.targetQuery)}
+                              className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
+                              title="Generate 1-Click Content Brief"
+                            >
+                              <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                              <span>Brief</span>
+                            </button>
+
+                            <button
+                              onClick={() => handleCopyAction(act)}
+                              className="p-1.5 text-slate-400 hover:text-slate-700 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                              title="Copy Action Details"
+                            >
+                              {copiedActionId === act.id ? (
+                                <Check className="w-4 h-4 text-emerald-600" />
+                              ) : (
+                                <Copy className="w-4 h-4" />
+                              )}
+                            </button>
                           </div>
                         </div>
-
-                        {/* Right Actions & Impact */}
-                        <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
-                          <span className="text-xs font-mono font-black text-emerald-600 tracking-wider bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-200">
-                            {act.estimatedTrafficImpact}
-                          </span>
-
-                          <button
-                            onClick={() => setSelectedActionForWhy(act)}
-                            className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
-                          >
-                            <HelpCircle className="w-3.5 h-3.5 text-blue-600" />
-                            <span>Why?</span>
-                          </button>
-
-                          <button
-                            onClick={() => setBriefSeed(act.targetQuery)}
-                            className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
-                            title="Generate 1-Click Content Brief"
-                          >
-                            <FileText className="w-3.5 h-3.5 text-indigo-600" />
-                            <span>Brief</span>
-                          </button>
-
-                          <button
-                            onClick={() => handleCopyAction(act)}
-                            className="p-1.5 text-slate-400 hover:text-slate-700 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-                            title="Copy Action Details"
-                          >
-                            {copiedActionId === act.id ? (
-                              <Check className="w-4 h-4 text-emerald-600" />
-                            ) : (
-                              <Copy className="w-4 h-4" />
-                            )}
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             )}
           </div>

@@ -43,7 +43,6 @@ export function parseJinaSearchResults(text: string): SerpResultItem[] {
   const results: SerpResultItem[] = [];
   if (!text) return results;
 
-  // Regex to extract URL Source: <url> and corresponding Title: <title>
   const blocks = text.split(/\[\d+\] Title:/i);
 
   for (const block of blocks) {
@@ -62,114 +61,148 @@ export function parseJinaSearchResults(text: string): SerpResultItem[] {
     }
   }
 
-  // Fallback regex if split pattern differs
-  if (results.length === 0) {
-    const regex = /URL Source:\s*(https?:\/\/[^\s\n\r]+)/gi;
-    let match;
-    while ((match = regex.exec(text)) !== null) {
-      const url = match[1].trim();
-      if (!results.some((r) => r.url === url)) {
-        results.push({
-          title: url,
-          url,
-          domain: extractDomain(url),
-        });
-      }
-    }
-  }
-
   return results.slice(0, 10);
 }
 
 /**
- * Fetches genuine SERP results for a single query using Jina Search API
+ * Fallback via OpenRouter web_search if Jina is unavailable or rate-limited
  */
-export async function fetchSerpResults(
-  query: string,
-  apiKey: string = process.env.JINA_API_KEY || 'jina_dfd60e9498b74896b272f3fe3e940138FQUgfvNa96XX1Kpf5pJA7oqc9xRA'
-): Promise<SerpResultItem[]> {
-  try {
-    const url = new URL(`https://s.jina.ai/${encodeURIComponent(query.trim())}`);
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000);
+async function fetchSerpViaOpenRouter(keyword: string): Promise<SerpResultItem[]> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) return [];
 
-    const res = await fetch(url.toString(), {
-      signal: controller.signal,
+  try {
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
-        'X-No-Cache': 'true',
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://google-keyword-dominator.vercel.app',
+        'X-Title': 'Google Keyword Dominator SERP Overlap',
       },
+      body: JSON.stringify({
+        model: 'deepseek/deepseek-v4-flash-0731',
+        tools: [
+          {
+            type: 'openrouter:web_search',
+            parameters: { engine: 'auto', max_results: 10 },
+          },
+        ],
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a search scraper. Search Google for the given keyword and return the top 10 search results as pure JSON: [{"title": "...", "url": "..."}]',
+          },
+          { role: 'user', content: `Search Google for "${keyword}".` },
+        ],
+        temperature: 0.1,
+      }),
     });
 
-    clearTimeout(timeoutId);
+    if (!res.ok) return [];
+    const data = await res.json();
+    const content = data.choices?.[0]?.message?.content?.trim();
+    if (!content) return [];
 
-    if (!res.ok) {
-      return [];
+    const jsonMatch = content.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]) as { title: string; url: string }[];
+      return parsed.map((item) => ({
+        title: item.title,
+        url: item.url,
+        domain: extractDomain(item.url),
+      })).slice(0, 10);
     }
-
-    const text = await res.text();
-    return parseJinaSearchResults(text);
+    return [];
   } catch {
     return [];
   }
 }
 
 /**
- * Computes the full NxN overlap matrix between a selected set of keywords (up to 8 keywords)
+ * Fetch top 10 search results for a keyword with 2-step waterfall: Jina -> OpenRouter web_search
  */
-export async function computeSerpOverlapMatrix(
-  keywords: string[],
-  apiKey?: string
-): Promise<SerpOverlapMatrixData> {
-  const selected = keywords.slice(0, 8);
+export async function fetchSerpResults(keyword: string): Promise<SerpResultItem[]> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+  try {
+    const cleanKeyword = encodeURIComponent(keyword.trim());
+    const res = await fetch(`https://s.jina.ai/${cleanKeyword}`, {
+      headers: {
+        Accept: 'text/markdown',
+        'User-Agent': 'GoogleKeywordDominator/1.0',
+      },
+      signal: controller.signal,
+    });
+
+    if (res.ok) {
+      const text = await res.text();
+      const results = parseJinaSearchResults(text);
+      if (results.length > 0) {
+        clearTimeout(timeoutId);
+        return results;
+      }
+    }
+  } catch {
+    // Proceed to OpenRouter fallback
+  } finally {
+    clearTimeout(timeoutId);
+  }
+
+  // Step 2: Fallback to OpenRouter web_search
+  return await fetchSerpViaOpenRouter(keyword);
+}
+
+/**
+ * Calculates URL and Domain overlap between all keyword pairs.
+ */
+export function computeSerpOverlap(keywordsSerpData: KeywordSerpData[]): SerpOverlapMatrixData {
+  const keywords = keywordsSerpData.map((d) => d.keyword);
   const serpMap: Record<string, SerpResultItem[]> = {};
+  const allDomainsSet = new Set<string>();
 
-  await Promise.all(
-    selected.map(async (kw) => {
-      serpMap[kw] = await fetchSerpResults(kw, apiKey);
-    })
-  );
+  keywordsSerpData.forEach((item) => {
+    serpMap[item.keyword] = item.results;
+    item.results.forEach((r) => allDomainsSet.add(r.domain));
+  });
 
-  const n = selected.length;
+  const n = keywords.length;
   const matrix: number[][] = Array.from({ length: n }, () => Array(n).fill(0));
   const domainMatrix: number[][] = Array.from({ length: n }, () => Array(n).fill(0));
   const topOverlaps: OverlapPair[] = [];
-  const domainSet = new Set<string>();
 
   for (let i = 0; i < n; i++) {
-    const kwA = selected[i];
-    const resultsA = serpMap[kwA] || [];
-    const urlsA = new Set(resultsA.map((r) => r.url));
-    const domainsA = new Set(resultsA.map((r) => r.domain));
-
-    resultsA.forEach((r) => domainSet.add(r.domain));
-
     for (let j = 0; j < n; j++) {
       if (i === j) {
-        matrix[i][j] = resultsA.length;
-        domainMatrix[i][j] = domainsA.size;
+        matrix[i][j] = serpMap[keywords[i]]?.length || 0;
+        domainMatrix[i][j] = new Set(serpMap[keywords[i]]?.map((r) => r.domain)).size;
         continue;
       }
 
-      const kwB = selected[j];
-      const resultsB = serpMap[kwB] || [];
-      const urlsB = new Set(resultsB.map((r) => r.url));
-      const domainsB = new Set(resultsB.map((r) => r.domain));
+      const resultsA = serpMap[keywords[i]] || [];
+      const resultsB = serpMap[keywords[j]] || [];
 
-      const sharedUrls = Array.from(urlsA).filter((u) => urlsB.has(u));
-      const sharedDomains = Array.from(domainsA).filter((d) => domainsB.has(d));
+      const urlsA = new Set(resultsA.map((r) => r.url.toLowerCase()));
+      const sharedUrls = resultsB.filter((r) => urlsA.has(r.url.toLowerCase())).map((r) => r.url);
+
+      const domainsA = new Set(resultsA.map((r) => r.domain.toLowerCase()));
+      const sharedDomains = Array.from(
+        new Set(resultsB.filter((r) => domainsA.has(r.domain.toLowerCase())).map((r) => r.domain))
+      );
 
       matrix[i][j] = sharedUrls.length;
       domainMatrix[i][j] = sharedDomains.length;
 
-      if (i < j && (sharedUrls.length > 0 || sharedDomains.length > 0)) {
-        const maxLen = Math.max(1, resultsA.length, resultsB.length);
-        const pct = Math.round((sharedUrls.length / maxLen) * 100);
+      if (i < j) {
+        const totalDistinctUrls = new Set([...resultsA.map((r) => r.url), ...resultsB.map((r) => r.url)]).size;
+        const overlapPercentage = totalDistinctUrls > 0 ? Math.round((sharedUrls.length / 10) * 100) : 0;
+
         topOverlaps.push({
-          keywordA: kwA,
-          keywordB: kwB,
+          keywordA: keywords[i],
+          keywordB: keywords[j],
           overlapCount: sharedUrls.length,
-          overlapPercentage: pct,
+          overlapPercentage,
           sharedUrls,
           sharedDomains,
         });
@@ -177,14 +210,30 @@ export async function computeSerpOverlapMatrix(
     }
   }
 
-  topOverlaps.sort((a, b) => b.overlapCount - a.overlapCount || b.overlapPercentage - a.overlapPercentage);
+  topOverlaps.sort((a, b) => b.overlapCount - a.overlapCount);
 
   return {
-    keywords: selected,
+    keywords,
     serpMap,
     matrix,
     domainMatrix,
     topOverlaps,
-    allDomains: Array.from(domainSet).sort(),
+    allDomains: Array.from(allDomainsSet),
   };
+}
+
+/**
+ * End-to-end matrix computation for route.ts
+ */
+export async function computeSerpOverlapMatrix(
+  keywords: string[],
+  _apiKey?: string
+): Promise<SerpOverlapMatrixData> {
+  const serpDataPromises = keywords.map(async (kw) => {
+    const results = await fetchSerpResults(kw);
+    return { keyword: kw, results };
+  });
+
+  const keywordsSerpData = await Promise.all(serpDataPromises);
+  return computeSerpOverlap(keywordsSerpData);
 }

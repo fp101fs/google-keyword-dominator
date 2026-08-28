@@ -3,7 +3,7 @@
  * 
  * Extracts full situational context about any user website:
  * 1. Waterfall extraction: Jina Reader (fast, free) -> OpenRouter web_fetch (fallback)
- * 2. Automatic Sitemap.xml discovery and URL extraction
+ * 2. Recursive Sitemap.xml and sitemap_index.xml discovery
  * 3. Structured business & topical context profile for LLM prompt injection
  */
 
@@ -44,7 +44,7 @@ async function fetchViaJinaReader(targetUrl: string): Promise<string | null> {
     if (!res.ok) return null;
     const text = await res.text();
     if (text.length < 200) return null;
-    return text.slice(0, 15000); // 15k character ceiling for fast processing
+    return text.slice(0, 15000);
   } catch {
     return null;
   } finally {
@@ -102,7 +102,7 @@ async function fetchViaOpenRouterWebFetch(targetUrl: string): Promise<string | n
 }
 
 /**
- * 3. Discover and parse sitemap.xml
+ * 3. Discover and parse sitemap.xml with recursive sitemap index support (#6)
  */
 export async function fetchSiteSitemapUrls(targetUrl: string): Promise<{ sitemapUrl?: string; urls: string[] }> {
   const cleanDomain = targetUrl.replace(/^(https?:\/\/)/, '').replace(/\/.*$/, '');
@@ -112,9 +112,12 @@ export async function fetchSiteSitemapUrls(targetUrl: string): Promise<{ sitemap
     `https://${cleanDomain}/wp-sitemap.xml`,
   ];
 
+  const collectedUrls = new Set<string>();
+  let verifiedSitemapUrl: string | undefined;
+
   for (const sitemapUrl of candidateSitemaps) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4000);
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
 
     try {
       const res = await fetch(sitemapUrl, {
@@ -126,24 +129,58 @@ export async function fetchSiteSitemapUrls(targetUrl: string): Promise<{ sitemap
 
       if (res.ok) {
         const xml = await res.text();
-        // Simple regex extract for <loc>...</loc>
-        const locMatches = Array.from(xml.matchAll(/<loc>([\s\S]*?)<\/loc>/gi))
+        verifiedSitemapUrl = sitemapUrl;
+
+        // Check if this is a sitemap index containing sub-sitemaps
+        const subSitemapMatches = Array.from(xml.matchAll(/<sitemap>\s*<loc>([\s\S]*?)<\/loc>/gi))
           .map((m) => m[1].trim())
           .filter((u) => u.startsWith('http'));
 
-        if (locMatches.length > 0) {
+        if (subSitemapMatches.length > 0) {
+          // Fetch the first 3 sub-sitemaps (e.g. post-sitemap, page-sitemap)
+          const subPromises = subSitemapMatches.slice(0, 3).map(async (subUrl) => {
+            try {
+              const subRes = await fetch(subUrl, {
+                headers: { 'User-Agent': 'Mozilla/5.0' },
+                signal: AbortSignal.timeout(4000),
+              });
+              if (subRes.ok) {
+                const subXml = await subRes.text();
+                const locs = Array.from(subXml.matchAll(/<loc>([\s\S]*?)<\/loc>/gi)).map((m) => m[1].trim());
+                locs.forEach((u) => {
+                  if (u.startsWith('http') && !u.endsWith('.xml')) collectedUrls.add(u);
+                });
+              }
+            } catch {
+              // Ignore sub-sitemap fetch error
+            }
+          });
+          await Promise.all(subPromises);
+        } else {
+          // Standard single sitemap
+          const locMatches = Array.from(xml.matchAll(/<loc>([\s\S]*?)<\/loc>/gi))
+            .map((m) => m[1].trim())
+            .filter((u) => u.startsWith('http') && !u.endsWith('.xml'));
+
+          locMatches.forEach((u) => collectedUrls.add(u));
+        }
+
+        if (collectedUrls.size > 0) {
           clearTimeout(timeoutId);
-          return { sitemapUrl, urls: locMatches.slice(0, 100) };
+          break;
         }
       }
     } catch {
-      // Continue to next candidate
+      // Continue
     } finally {
       clearTimeout(timeoutId);
     }
   }
 
-  return { urls: [] };
+  return {
+    sitemapUrl: verifiedSitemapUrl,
+    urls: Array.from(collectedUrls).slice(0, 150),
+  };
 }
 
 /**
@@ -157,7 +194,7 @@ export async function buildSiteContextProfile(inputUrl: string): Promise<SiteCon
 
   const domain = normalizedUrl.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
 
-  // 1. Discover Sitemap in parallel
+  // 1. Discover Sitemap in parallel (including sub-sitemaps)
   const sitemapPromise = fetchSiteSitemapUrls(normalizedUrl);
 
   // 2. Waterfall Step 1: Jina Reader
@@ -245,7 +282,6 @@ Return ONLY valid JSON matching this exact structure:
     }
   }
 
-  // Fallback heuristic profile
   return {
     domain,
     normalizedUrl,

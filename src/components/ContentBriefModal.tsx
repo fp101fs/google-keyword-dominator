@@ -278,16 +278,34 @@ ${faqList.map((faq) => `### Q: ${faq.question}\n${faq.answerSnippet}`).join('\n\
             <div className="flex items-center gap-2">
               <button
                 onClick={onClose}
-                className="px-4 py-2 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold cursor-pointer transition-colors"
+                className="px-3.5 py-2 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold cursor-pointer transition-colors"
               >
                 Close
+              </button>
+              <button
+                onClick={() => {
+                  const blob = new Blob([markdownContent], { type: 'text/markdown;charset=utf-8' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `content-brief-${seed.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.md`;
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  URL.revokeObjectURL(url);
+                }}
+                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+                title="Download as Markdown file for Notion/Obsidian"
+              >
+                <FileText className="w-3.5 h-3.5 text-slate-600" />
+                <span>Download .md</span>
               </button>
               <button
                 onClick={handleCopyMarkdown}
                 className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md cursor-pointer transition-colors"
               >
                 {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-                <span>{copied ? 'Copied Brief' : 'Copy Markdown'}</span>
+                <span>{copied ? 'Copied' : 'Copy Markdown'}</span>
               </button>
             </div>
           </div>
