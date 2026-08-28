@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useSyncExternalStore } from 'react';
 import {
   SavedActionItem,
   getSavedSprintItems,
@@ -21,21 +21,40 @@ import {
   ChevronUp,
 } from 'lucide-react';
 
+function subscribeToSprint(callback: () => void) {
+  window.addEventListener('gkd_sprint_updated', callback);
+  window.addEventListener('storage', callback);
+  return () => {
+    window.removeEventListener('gkd_sprint_updated', callback);
+    window.removeEventListener('storage', callback);
+  };
+}
+
+function getSprintSnapshot(): string {
+  if (typeof window === 'undefined') return '[]';
+  return localStorage.getItem('gkd_saved_sprint_items') || '[]';
+}
+
+function getSprintServerSnapshot(): string {
+  return '[]';
+}
+
 export const ActionCartDrawer: React.FC = () => {
-  const [items, setItems] = useState<SavedActionItem[]>(() => getSavedSprintItems());
   const [isOpen, setIsOpen] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  useEffect(() => {
-    const handleUpdate = () => {
-      setItems(getSavedSprintItems());
-    };
+  const rawItems = useSyncExternalStore(
+    subscribeToSprint,
+    getSprintSnapshot,
+    getSprintServerSnapshot
+  );
 
-    window.addEventListener('gkd_sprint_updated', handleUpdate);
-    return () => {
-      window.removeEventListener('gkd_sprint_updated', handleUpdate);
-    };
-  }, []);
+  let items: SavedActionItem[] = [];
+  try {
+    items = JSON.parse(rawItems);
+  } catch {
+    items = [];
+  }
 
   const handleCopy = async (item: SavedActionItem) => {
     await navigator.clipboard.writeText(item.content);
