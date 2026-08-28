@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, Sparkles, TrendingUp, Globe, ArrowRight, ShieldCheck, Loader2, LogOut, CheckCircle, ChevronRight } from 'lucide-react';
+import { X, Sparkles, TrendingUp, Globe, ArrowRight, ShieldCheck, Loader2, LogOut, CheckCircle, RefreshCw } from 'lucide-react';
 import { GscConnectedSnapshot, GscProperty, GscQueryItem } from '@/lib/gsc/types';
 
 interface GscStrikingModalProps {
@@ -31,7 +31,7 @@ export const GscStrikingModal: React.FC<GscStrikingModalProps> = ({
   isAuthenticated,
   onLogout,
 }) => {
-  const [activeTab, setActiveTab] = useState<'striking' | 'all' | 'properties'>('striking');
+  const [activeTab, setActiveTab] = useState<'striking' | 'all'>('striking');
 
   if (!isOpen) return null;
 
@@ -69,8 +69,85 @@ export const GscStrikingModal: React.FC<GscStrikingModalProps> = ({
 
         {/* Modal Body */}
         <div className="p-6 overflow-y-auto space-y-5 flex-1">
-          {!connectedSnapshot && !isAuthenticated ? (
-            /* Disconnected / Connect GSC State */
+          {/* Top Quick Actions Bar (Always Visible: Connect Google, Demo, & Disconnect) */}
+          <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 bg-slate-50 border border-slate-200 rounded-2xl">
+            <div className="flex items-center gap-2 text-xs text-slate-700">
+              <Globe className="w-4 h-4 text-emerald-600" />
+              <span>Property:</span>
+              {properties.length > 1 ? (
+                <select
+                  value={selectedProperty}
+                  onChange={(e) => onSelectProperty(e.target.value)}
+                  className="p-1.5 px-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-900 cursor-pointer focus:outline-hidden"
+                >
+                  {properties.map((p) => (
+                    <option key={p.siteUrl} value={p.siteUrl}>
+                      {p.siteUrl}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <strong className="text-slate-900 font-bold">
+                  {connectedSnapshot?.property || selectedProperty || (isAuthenticated ? 'Connected' : 'Not Connected')}
+                </strong>
+              )}
+
+              {connectedSnapshot?.demo && (
+                <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-md">
+                  Demo Data
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* If Not Connected or in Demo Mode, show Connect Google Account button */}
+              {(!isAuthenticated || connectedSnapshot?.demo) && (
+                <a
+                  href="/api/auth/google"
+                  className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer"
+                >
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24">
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                  </svg>
+                  <span>Connect Google Account</span>
+                </a>
+              )}
+
+              {/* Demo Mode Button if not loaded */}
+              {!connectedSnapshot && (
+                <button
+                  onClick={onConnectDemo}
+                  disabled={isLoadingGsc}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {isLoadingGsc ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                  )}
+                  <span>Demo Mode</span>
+                </button>
+              )}
+
+              {/* Disconnect Button if authenticated or demo active */}
+              {(isAuthenticated || connectedSnapshot) && (
+                <button
+                  onClick={onLogout}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition-colors cursor-pointer text-xs font-bold"
+                  title="Disconnect Google Search Console"
+                >
+                  <LogOut className="w-3.5 h-3.5 text-rose-600" />
+                  <span>Disconnect</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {!connectedSnapshot ? (
+            /* Disconnected Welcome Card */
             <div className="text-center py-8 px-4 space-y-6 max-w-lg mx-auto">
               <div className="w-14 h-14 bg-emerald-100 text-emerald-700 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
                 <Globe className="w-7 h-7" />
@@ -85,7 +162,6 @@ export const GscStrikingModal: React.FC<GscStrikingModalProps> = ({
               </div>
 
               <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
-                {/* 1. Real Google OAuth Connect Button */}
                 <a
                   href="/api/auth/google"
                   className="w-full sm:w-auto px-6 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer"
@@ -99,7 +175,6 @@ export const GscStrikingModal: React.FC<GscStrikingModalProps> = ({
                   <span>Connect Google Account</span>
                 </a>
 
-                {/* 2. Instant Demo Mode Button */}
                 <button
                   onClick={onConnectDemo}
                   disabled={isLoadingGsc}
@@ -120,72 +195,41 @@ export const GscStrikingModal: React.FC<GscStrikingModalProps> = ({
               </div>
             </div>
           ) : (
-            /* Connected GSC State */
-            <div className="space-y-5">
-              {/* Top Controls Bar */}
-              <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 bg-slate-50 border border-slate-200 rounded-2xl">
-                <div className="flex items-center gap-2 text-xs text-slate-700">
-                  <Globe className="w-4 h-4 text-emerald-600" />
-                  <span>Property:</span>
-                  {properties.length > 1 ? (
-                    <select
-                      value={selectedProperty}
-                      onChange={(e) => onSelectProperty(e.target.value)}
-                      className="p-1 px-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-900 cursor-pointer"
-                    >
-                      {properties.map((p) => (
-                        <option key={p.siteUrl} value={p.siteUrl}>
-                          {p.siteUrl}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <strong className="text-slate-900">{connectedSnapshot?.property || selectedProperty}</strong>
-                  )}
-
-                  {connectedSnapshot?.demo && (
-                    <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-md">
-                      Demo Data
-                    </span>
-                  )}
-                </div>
-
+            /* Connected Queries List */
+            <div className="space-y-4">
+              {/* Sub-Tabs: Striking vs All Queries */}
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2 text-xs font-bold">
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={onLogout}
-                    className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer text-xs flex items-center gap-1 font-semibold"
-                    title="Disconnect Google Search Console"
+                    onClick={() => setActiveTab('striking')}
+                    className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                      activeTab === 'striking'
+                        ? 'bg-emerald-600 text-white shadow-2xs'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
                   >
-                    <LogOut className="w-3.5 h-3.5" />
-                    <span>Disconnect</span>
+                    <TrendingUp className="w-3.5 h-3.5" />
+                    <span>Striking Distance Opportunities ({queries.length})</span>
+                  </button>
+
+                  <button
+                    onClick={() => setActiveTab('all')}
+                    className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                      activeTab === 'all'
+                        ? 'bg-slate-900 text-white shadow-2xs'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    <span>All Ranking Queries ({allQueries.length})</span>
                   </button>
                 </div>
-              </div>
 
-              {/* Sub-Tabs: Striking vs All Queries */}
-              <div className="flex items-center gap-2 border-b border-slate-100 pb-2 text-xs font-bold">
-                <button
-                  onClick={() => setActiveTab('striking')}
-                  className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
-                    activeTab === 'striking'
-                      ? 'bg-emerald-600 text-white shadow-2xs'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  <TrendingUp className="w-3.5 h-3.5" />
-                  <span>Striking Distance Opportunities ({queries.length})</span>
-                </button>
-
-                <button
-                  onClick={() => setActiveTab('all')}
-                  className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                    activeTab === 'all'
-                      ? 'bg-slate-900 text-white shadow-2xs'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  <span>All Ranking Queries ({allQueries.length})</span>
-                </button>
+                {isLoadingGsc && (
+                  <div className="flex items-center gap-1 text-slate-400 font-normal">
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+                    <span>Loading...</span>
+                  </div>
+                )}
               </div>
 
               {/* Queries List */}
@@ -249,7 +293,7 @@ export const GscStrikingModal: React.FC<GscStrikingModalProps> = ({
         <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
           <span className="flex items-center gap-1.5">
             <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Google Search Console API Integration</span>
+            <span>Google Search Console API &bull; Read-Only</span>
           </span>
           <button
             onClick={onClose}
