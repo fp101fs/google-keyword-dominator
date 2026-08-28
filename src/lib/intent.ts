@@ -1,34 +1,39 @@
-export type SearchIntent = 'informational' | 'commercial' | 'transactional' | 'navigational' | 'all';
+export type SearchIntent = 'informational' | 'commercial' | 'transactional' | 'navigational';
 
 export interface IntentRule {
-  intent: Exclude<SearchIntent, 'all'>;
+  intent: SearchIntent;
   label: string;
+  shortLabel: string;
   badgeClass: string;
   description: string;
 }
 
-export const INTENT_DEFINITIONS: Record<Exclude<SearchIntent, 'all'>, IntentRule> = {
+export const INTENT_DEFINITIONS: Record<SearchIntent, IntentRule> = {
   informational: {
     intent: 'informational',
     label: 'Informational',
+    shortLabel: 'Info',
     badgeClass: 'bg-sky-50 text-sky-700 border-sky-200',
     description: 'Learning, discovering, asking questions (how, what, why, tutorial, tips)',
   },
   commercial: {
     intent: 'commercial',
     label: 'Commercial',
+    shortLabel: 'Comm',
     badgeClass: 'bg-purple-50 text-purple-700 border-purple-200',
     description: 'Comparing, researching solutions before buying (best, review, top, vs)',
   },
   transactional: {
     intent: 'transactional',
     label: 'Transactional',
+    shortLabel: 'Buy',
     badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     description: 'Ready to buy, order, download, or hire (buy, price, cheap, deals, order)',
   },
   navigational: {
     intent: 'navigational',
     label: 'Navigational',
+    shortLabel: 'Nav',
     badgeClass: 'bg-amber-50 text-amber-700 border-amber-200',
     description: 'Looking for a specific website, brand, or local spot (near me, login, app)',
   },
@@ -45,38 +50,51 @@ const COMMERCIAL_TRIGGERS = [
 ];
 
 const TRANSACTIONAL_TRIGGERS = [
-  'buy', 'price', 'pricing', 'cheap', 'cost', 'discount', 'coupon', 'deals',
-  'order', 'purchase', 'sale', 'hire', 'service', 'quote', 'download', 'shop', 'for sale'
+  'buy', 'price', 'cost', 'cheap', 'discount', 'deal', 'order', 'coupon',
+  'purchase', 'for sale', 'hire', 'service', 'subscription', 'software', 'download', 'shop'
 ];
 
 const NAVIGATIONAL_TRIGGERS = [
-  'near me', 'login', 'sign in', 'official', 'portal', 'website', 'app',
-  'contact', 'phone number', 'address', 'store hours', 'customer service'
+  'login', 'signin', 'portal', 'website', 'official', 'app', 'near me',
+  'contact', 'support', 'customer service', 'store'
 ];
 
-export function classifyIntent(keyword: string): Exclude<SearchIntent, 'all'> {
-  const lower = keyword.toLowerCase();
+export function detectSearchIntent(query: string, seed: string = ''): SearchIntent {
+  const q = query.toLowerCase().trim();
+  const s = seed.toLowerCase().trim();
 
-  // Check transactional first (strongest intent)
-  if (TRANSACTIONAL_TRIGGERS.some((t) => lower.includes(t))) {
-    return 'transactional';
+  // Strip seed from query to examine modifier words
+  const modifierWords = s ? q.replace(s, '').trim() : q;
+
+  for (const trigger of TRANSACTIONAL_TRIGGERS) {
+    const regex = new RegExp(`\\b${trigger}\\b`, 'i');
+    if (regex.test(modifierWords) || regex.test(q)) {
+      return 'transactional';
+    }
   }
 
-  // Check commercial
-  if (COMMERCIAL_TRIGGERS.some((t) => lower.includes(t))) {
-    return 'commercial';
+  for (const trigger of COMMERCIAL_TRIGGERS) {
+    const regex = new RegExp(`\\b${trigger}\\b`, 'i');
+    if (regex.test(modifierWords) || regex.test(q)) {
+      return 'commercial';
+    }
   }
 
-  // Check navigational
-  if (NAVIGATIONAL_TRIGGERS.some((t) => lower.includes(t))) {
-    return 'navigational';
+  for (const trigger of INFORMATIONAL_TRIGGERS) {
+    const regex = new RegExp(`\\b${trigger}\\b`, 'i');
+    if (regex.test(modifierWords) || regex.test(q)) {
+      return 'informational';
+    }
   }
 
-  // Check informational
-  if (INFORMATIONAL_TRIGGERS.some((t) => lower.includes(t))) {
-    return 'informational';
+  for (const trigger of NAVIGATIONAL_TRIGGERS) {
+    const regex = new RegExp(`\\b${trigger}\\b`, 'i');
+    if (regex.test(modifierWords) || regex.test(q)) {
+      return 'navigational';
+    }
   }
 
-  // Default to informational if questions / longer phrase, else commercial
-  return keyword.split(/\s+/).length >= 3 ? 'informational' : 'commercial';
+  return 'informational';
 }
+
+export const classifyIntent = detectSearchIntent;

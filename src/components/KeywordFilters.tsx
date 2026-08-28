@@ -13,7 +13,7 @@ export interface FilterState {
   minScore: number;
   maxScore: number;
   selectedSource: string;
-  intent: SearchIntent;
+  intent: SearchIntent | "all";
   subTab: ExplorerSubTab;
 }
 

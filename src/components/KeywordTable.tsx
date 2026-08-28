@@ -90,11 +90,11 @@ export const KeywordTable: React.FC<KeywordTableProps> = ({
   const getDiffBadge = (diff: string) => {
     switch (diff) {
       case 'High':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">High</span>;
+        return <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">High</span>;
       case 'Med':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">Med</span>;
+        return <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">Med</span>;
       case 'Low':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">Low</span>;
+        return <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">Low</span>;
       default:
         return <span>{diff}</span>;
     }
@@ -103,11 +103,11 @@ export const KeywordTable: React.FC<KeywordTableProps> = ({
   const getHotBadge = (hot: string) => {
     switch (hot) {
       case 'Hottest keyword':
-        return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-black bg-rose-100 text-rose-800">Hottest keyword</span>;
+        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-black bg-rose-100 text-rose-800">Hottest</span>;
       case 'Hot keyword':
-        return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800">Hot keyword</span>;
+        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800">Hot</span>;
       case 'Trending':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">Trending</span>;
+        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-50 text-blue-700">Trend</span>;
       default:
         return <span className="text-slate-300 font-bold">-</span>;
     }
@@ -169,14 +169,14 @@ export const KeywordTable: React.FC<KeywordTableProps> = ({
         </div>
       </div>
 
-      {/* Data Table */}
+      {/* Data Table with Expanded Keyword Column */}
       <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse min-w-[980px]">
+        <table className="w-full text-left border-collapse table-fixed min-w-[900px]">
           <thead>
             <tr className="bg-slate-100/80 border-b border-slate-200 text-[11px] font-bold text-slate-600 uppercase tracking-wider select-none">
-              {/* Keyword */}
+              {/* Keyword (Expanded Main Column) */}
               <th
-                className="py-3 px-4 cursor-pointer hover:text-blue-600 transition-colors"
+                className="py-3 px-4 cursor-pointer hover:text-blue-600 transition-colors w-auto"
                 onClick={() => handleSort('keyword')}
               >
                 <div className="flex items-center gap-1.5">
@@ -191,7 +191,7 @@ export const KeywordTable: React.FC<KeywordTableProps> = ({
 
               {/* Seed Keyword */}
               <th
-                className="py-3 px-3 cursor-pointer hover:text-blue-600 transition-colors w-32"
+                className="py-3 px-2 cursor-pointer hover:text-blue-600 transition-colors w-24"
                 onClick={() => handleSort('seedKeyword')}
               >
                 <div className="flex items-center gap-1">
@@ -204,9 +204,9 @@ export const KeywordTable: React.FC<KeywordTableProps> = ({
                 </div>
               </th>
 
-              {/* Intent */}
+              {/* Intent (Shortened) */}
               <th
-                className="py-3 px-3 cursor-pointer hover:text-blue-600 transition-colors w-28 text-center"
+                className="py-3 px-2 cursor-pointer hover:text-blue-600 transition-colors w-20 text-center"
                 onClick={() => handleSort('intent')}
               >
                 <div className="flex items-center justify-center gap-1">
@@ -221,10 +221,10 @@ export const KeywordTable: React.FC<KeywordTableProps> = ({
 
               {/* Source */}
               <th
-                className="py-3 px-3 cursor-pointer hover:text-blue-600 transition-colors w-28"
+                className="py-3 px-2 cursor-pointer hover:text-blue-600 transition-colors w-22 text-center"
                 onClick={() => handleSort('source')}
               >
-                <div className="flex items-center gap-1">
+                <div className="flex items-center justify-center gap-1">
                   <span>Source</span>
                   <button
                     type="button"
@@ -233,14 +233,9 @@ export const KeywordTable: React.FC<KeywordTableProps> = ({
                   >
                     <HelpCircle className="w-3 h-3" />
                   </button>
-                  {sortField === 'source' ? (
-                    sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-blue-600" /> : <ArrowDown className="w-3.5 h-3.5 text-blue-600" />
-                  ) : (
-                    <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 opacity-50" />
-                  )}
                 </div>
                 {activeTooltip === 'source' && (
-                  <div className="absolute z-20 mt-1 p-2 bg-slate-900 text-white font-normal normal-case text-[10px] rounded shadow-lg max-w-xs">
+                  <div className="absolute z-20 mt-1 p-2 bg-slate-900 text-white font-normal normal-case text-[10px] rounded shadow-lg max-w-xs text-left">
                     The platform or query engine that surfaced this suggestion.
                   </div>
                 )}
@@ -248,7 +243,7 @@ export const KeywordTable: React.FC<KeywordTableProps> = ({
 
               {/* Country */}
               <th
-                className="py-3 px-3 cursor-pointer hover:text-blue-600 transition-colors w-20 text-center"
+                className="py-3 px-2 cursor-pointer hover:text-blue-600 transition-colors w-16 text-center"
                 onClick={() => handleSort('country')}
               >
                 <div className="flex items-center justify-center gap-1">
@@ -258,7 +253,7 @@ export const KeywordTable: React.FC<KeywordTableProps> = ({
 
               {/* AP */}
               <th
-                className="py-3 px-3 cursor-pointer hover:text-blue-600 transition-colors w-24 text-center"
+                className="py-3 px-2 cursor-pointer hover:text-blue-600 transition-colors w-16 text-center"
                 onClick={() => handleSort('ap')}
               >
                 <div className="flex items-center justify-center gap-1">
@@ -270,11 +265,6 @@ export const KeywordTable: React.FC<KeywordTableProps> = ({
                   >
                     <HelpCircle className="w-3 h-3" />
                   </button>
-                  {sortField === 'ap' ? (
-                    sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-blue-600" /> : <ArrowDown className="w-3.5 h-3.5 text-blue-600" />
-                  ) : (
-                    <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 opacity-50" />
-                  )}
                 </div>
                 {activeTooltip === 'ap' && (
                   <div className="absolute z-20 mt-1 p-2 bg-slate-900 text-white font-normal normal-case text-[10px] rounded shadow-lg max-w-xs text-left">
@@ -285,7 +275,7 @@ export const KeywordTable: React.FC<KeywordTableProps> = ({
 
               {/* Diff */}
               <th
-                className="py-3 px-3 cursor-pointer hover:text-blue-600 transition-colors w-24 text-center"
+                className="py-3 px-2 cursor-pointer hover:text-blue-600 transition-colors w-18 text-center"
                 onClick={() => handleSort('diff')}
               >
                 <div className="flex items-center justify-center gap-1">
@@ -297,22 +287,17 @@ export const KeywordTable: React.FC<KeywordTableProps> = ({
                   >
                     <HelpCircle className="w-3 h-3" />
                   </button>
-                  {sortField === 'diff' ? (
-                    sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-blue-600" /> : <ArrowDown className="w-3.5 h-3.5 text-blue-600" />
-                  ) : (
-                    <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 opacity-50" />
-                  )}
                 </div>
                 {activeTooltip === 'diff' && (
                   <div className="absolute z-20 mt-1 p-2 bg-slate-900 text-white font-normal normal-case text-[10px] rounded shadow-lg max-w-xs text-left">
-                    <strong>Difficulty (Diff):</strong> Categorized as Low, Med, or High reflecting relative competition for search engine placement based on AP, score, and word length.
+                    <strong>Difficulty (Diff):</strong> Categorized as Low, Med, or High reflecting relative competition for search engine placement.
                   </div>
                 )}
               </th>
 
-              {/* Hot */}
+              {/* Hot (Shortened) */}
               <th
-                className="py-3 px-4 cursor-pointer hover:text-blue-600 transition-colors w-36 text-center"
+                className="py-3 px-2 cursor-pointer hover:text-blue-600 transition-colors w-20 text-center"
                 onClick={() => handleSort('hot')}
               >
                 <div className="flex items-center justify-center gap-1">
@@ -324,48 +309,26 @@ export const KeywordTable: React.FC<KeywordTableProps> = ({
                   >
                     <HelpCircle className="w-3 h-3" />
                   </button>
-                  {sortField === 'hot' ? (
-                    sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-blue-600" /> : <ArrowDown className="w-3.5 h-3.5 text-blue-600" />
-                  ) : (
-                    <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 opacity-50" />
-                  )}
                 </div>
                 {activeTooltip === 'hot' && (
                   <div className="absolute z-20 mt-1 p-2 bg-slate-900 text-white font-normal normal-case text-[10px] rounded shadow-lg max-w-xs text-left">
-                    <strong>Hot:</strong> Most popular and highest ranking keywords. Lower AP indicates higher search prominence.
+                    <strong>Hot:</strong> Highest ranking keywords. Lower AP indicates higher search prominence.
                   </div>
                 )}
               </th>
 
               {/* Score */}
               <th
-                className="py-3 px-4 cursor-pointer hover:text-blue-600 transition-colors w-28 text-right"
+                className="py-3 px-3 cursor-pointer hover:text-blue-600 transition-colors w-20 text-right"
                 onClick={() => handleSort('relativeScore')}
               >
                 <div className="flex items-center justify-end gap-1">
                   <span>Score</span>
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); toggleTooltip('score'); }}
-                    className="text-slate-400 hover:text-slate-600"
-                  >
-                    <HelpCircle className="w-3 h-3" />
-                  </button>
-                  {sortField === 'relativeScore' ? (
-                    sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-blue-600" /> : <ArrowDown className="w-3.5 h-3.5 text-blue-600" />
-                  ) : (
-                    <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 opacity-50" />
-                  )}
                 </div>
-                {activeTooltip === 'score' && (
-                  <div className="absolute z-20 mt-1 right-4 p-2 bg-slate-900 text-white font-normal normal-case text-[10px] rounded shadow-lg max-w-xs text-left">
-                    <strong>Score:</strong> Relative popularity and frequency score calculated across this result set (0-100).
-                  </div>
-                )}
               </th>
 
-              {/* Actions & Ahrefs SERP Inspector */}
-              <th className="py-3 px-3 text-right w-24">Actions</th>
+              {/* Actions */}
+              <th className="py-3 px-3 text-right w-20">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-sm">
@@ -374,68 +337,68 @@ export const KeywordTable: React.FC<KeywordTableProps> = ({
                 key={`${item.keyword}-${idx}`}
                 className="hover:bg-blue-50/40 transition-colors group"
               >
-                {/* Keyword */}
-                <td className="py-3 px-4 font-semibold text-slate-900">
-                  <div className="flex items-center gap-2">
-                    <span>{item.keyword}</span>
-                  </div>
+                {/* Keyword (Expanded) */}
+                <td className="py-3 px-4 font-semibold text-slate-900 break-words">
+                  <span>{item.keyword}</span>
                 </td>
 
                 {/* Seed Keyword */}
-                <td className="py-3 px-3 text-xs text-slate-500 font-medium truncate max-w-[120px]">
+                <td className="py-3 px-2 text-xs text-slate-500 font-medium truncate">
                   {item.seedKeyword}
                 </td>
 
-                {/* Intent Badge */}
-                <td className="py-3 px-3 text-center">
-                  <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold border ${INTENT_DEFINITIONS[item.intent]?.badgeClass || 'bg-slate-100'}`}>
-                    {INTENT_DEFINITIONS[item.intent]?.label || item.intent}
+                {/* Short Intent Badge (Info, Comm, Buy, Nav) */}
+                <td className="py-3 px-2 text-center">
+                  <span
+                    className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold border ${INTENT_DEFINITIONS[item.intent]?.badgeClass || 'bg-slate-100'}`}
+                    title={INTENT_DEFINITIONS[item.intent]?.label || item.intent}
+                  >
+                    {INTENT_DEFINITIONS[item.intent]?.shortLabel || item.intent}
                   </span>
                 </td>
 
                 {/* Source */}
-                <td className="py-3 px-3 text-xs text-slate-600">
-                  <span className="inline-block px-2 py-0.5 rounded bg-slate-100 font-medium text-[11px] text-slate-700">
+                <td className="py-3 px-2 text-xs text-slate-600 text-center">
+                  <span className="inline-block px-1.5 py-0.5 rounded bg-slate-100 font-medium text-[10px] text-slate-700 truncate max-w-full">
                     {item.source}
                   </span>
                 </td>
 
                 {/* Country */}
-                <td className="py-3 px-3 text-xs text-slate-600 text-center font-bold">
+                <td className="py-3 px-2 text-xs text-slate-600 text-center font-bold">
                   {item.country}
                 </td>
 
                 {/* AP */}
-                <td className="py-3 px-3 text-xs text-slate-700 font-bold text-center">
+                <td className="py-3 px-2 text-xs text-slate-700 font-bold text-center">
                   <span className={item.ap <= 3 ? 'text-blue-600 font-black' : ''}>
                     {item.apFormatted}
                   </span>
                 </td>
 
                 {/* Diff */}
-                <td className="py-3 px-3 text-center">
+                <td className="py-3 px-2 text-center">
                   {getDiffBadge(item.diff)}
                 </td>
 
-                {/* Hot */}
-                <td className="py-3 px-4 text-center">
+                {/* Hot (Shortened) */}
+                <td className="py-3 px-2 text-center">
                   {getHotBadge(item.hot)}
                 </td>
 
                 {/* Score */}
-                <td className="py-3 px-4 text-right font-black text-slate-800">
+                <td className="py-3 px-3 text-right font-black text-slate-800 text-xs">
                   {item.relativeScore}
                 </td>
 
                 {/* Actions & Ahrefs SERP Trigger */}
                 <td className="py-3 px-3 text-right">
                   <div className="flex items-center justify-end gap-1">
-                    {/* Ahrefs 1-Click SERP Overview */}
                     {onInspectSerp && (
                       <button
                         onClick={() => onInspectSerp(item)}
-                        title="Inspect Live SERP Overview & Top 10 Competitors"
-                        className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded-lg transition-colors cursor-pointer"
+                        title="Inspect Live SERP Overview"
+                        className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded transition-colors cursor-pointer"
                       >
                         <Search className="w-3.5 h-3.5" />
                       </button>
@@ -444,7 +407,7 @@ export const KeywordTable: React.FC<KeywordTableProps> = ({
                     <button
                       onClick={() => copyRow(item.keyword, idx)}
                       title="Copy keyword"
-                      className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                      className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded transition-colors cursor-pointer"
                     >
                       {copiedIndex === idx ? (
                         <Check className="w-3.5 h-3.5 text-emerald-600" />
@@ -456,8 +419,8 @@ export const KeywordTable: React.FC<KeywordTableProps> = ({
                       href={`https://www.google.com/search?q=${encodeURIComponent(item.keyword)}&gl=${country.toLowerCase()}&hl=${language}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      title="Open Google Search in new tab"
-                      className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                      title="Open Google Search"
+                      className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
                     >
                       <ExternalLink className="w-3.5 h-3.5" />
                     </a>
