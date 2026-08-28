@@ -6,12 +6,14 @@ import { SummaryContainers } from '@/components/SummaryContainers';
 import { KeywordFilters, FilterState } from '@/components/KeywordFilters';
 import { KeywordTable } from '@/components/KeywordTable';
 import { VisualSearchTree } from '@/components/VisualSearchTree';
+import { ClusterBubbleMap } from '@/components/ClusterBubbleMap';
+import { HierarchicalClusterTree } from '@/components/HierarchicalClusterTree';
 import { ContentBriefModal } from '@/components/ContentBriefModal';
 import { LoadingState } from '@/components/LoadingState';
 import { EmptyState } from '@/components/EmptyState';
 import { FAQ } from '@/components/FAQ';
 import { KeywordItem, KeywordSummaryMetrics } from '@/lib/autocomplete';
-import { Sparkles, ShieldCheck, Globe, Zap, AlertCircle, Network, TableProperties } from 'lucide-react';
+import { Sparkles, ShieldCheck, Globe, Zap, AlertCircle, Network, TableProperties, CircleDot, GitFork } from 'lucide-react';
 
 export default function Home() {
   const [activeParams, setActiveParams] = useState<SearchParams>({
@@ -29,7 +31,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState<boolean>(false);
-  const [activeView, setActiveView] = useState<'table' | 'tree'>('table');
+  const [activeView, setActiveView] = useState<'table' | 'bubbles' | 'hierarchy' | 'tree'>('table');
   const [isBriefOpen, setIsBriefOpen] = useState<boolean>(false);
 
   const [filters, setFilters] = useState<FilterState>({
@@ -242,41 +244,72 @@ export default function Home() {
               {/* Top 7 Summary Metrics Containers in 1 Row */}
               {liveMetrics && <SummaryContainers metrics={liveMetrics} />}
 
-              {/* View Switcher Bar (Table vs Visual Graph) */}
-              <div className="flex items-center justify-between gap-3 bg-white p-2 rounded-xl border border-slate-200 shadow-2xs">
-                <div className="flex items-center gap-1.5">
+              {/* 4-Way Visualization View Switcher Bar */}
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-2 rounded-xl border border-slate-200 shadow-2xs">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {/* 1. Table View */}
                   <button
                     onClick={() => setActiveView('table')}
-                    className={`flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
                       activeView === 'table'
                         ? 'bg-slate-900 text-white shadow-xs'
                         : 'text-slate-600 hover:bg-slate-100'
                     }`}
                   >
                     <TableProperties className="w-3.5 h-3.5" />
-                    <span>Keyword Table View</span>
+                    <span>Table View</span>
                   </button>
+
+                  {/* 2. Interactive Cluster Map / Bubble Map */}
+                  <button
+                    onClick={() => setActiveView('bubbles')}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      activeView === 'bubbles'
+                        ? 'bg-purple-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <CircleDot className="w-3.5 h-3.5" />
+                    <span>Cluster Bubble Map</span>
+                    <span className="text-[10px] bg-purple-500/30 text-white px-1.5 py-0.2 rounded font-mono">Rank 1</span>
+                  </button>
+
+                  {/* 3. Keyword -> Cluster Hierarchy Tree */}
+                  <button
+                    onClick={() => setActiveView('hierarchy')}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      activeView === 'hierarchy'
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <GitFork className="w-3.5 h-3.5" />
+                    <span>Hierarchy Tree</span>
+                    <span className="text-[10px] bg-emerald-500/30 text-white px-1.5 py-0.2 rounded font-mono">Rank 3</span>
+                  </button>
+
+                  {/* 4. Radial Relationship Mindmap */}
                   <button
                     onClick={() => setActiveView('tree')}
-                    className={`flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
                       activeView === 'tree'
                         ? 'bg-blue-600 text-white shadow-xs'
                         : 'text-slate-600 hover:bg-slate-100'
                     }`}
                   >
                     <Network className="w-3.5 h-3.5" />
-                    <span>Visual Search Tree</span>
+                    <span>Radial Graph</span>
                   </button>
                 </div>
 
-                <div className="text-xs text-slate-500 font-medium hidden sm:block">
+                <div className="text-xs text-slate-500 font-medium hidden md:block">
                   Showing results for: <strong className="text-slate-800">{activeParams.query}</strong>
                 </div>
               </div>
 
-              {activeView === 'table' ? (
+              {/* View 1: Table */}
+              {activeView === 'table' && (
                 <>
-                  {/* Filtering Toolbar */}
                   <KeywordFilters
                     filters={filters}
                     onChange={setFilters}
@@ -285,7 +318,6 @@ export default function Home() {
                     filteredCount={filteredKeywords.length}
                   />
 
-                  {/* Data Table */}
                   <KeywordTable
                     seed={activeParams.query}
                     keywords={filteredKeywords}
@@ -295,8 +327,26 @@ export default function Home() {
                     onOpenContentBrief={() => setIsBriefOpen(true)}
                   />
                 </>
-              ) : (
-                /* Visual Keyword Graph / Tree */
+              )}
+
+              {/* View 2: Interactive Bubble Map (Rank 1) */}
+              {activeView === 'bubbles' && (
+                <ClusterBubbleMap
+                  seed={activeParams.query}
+                  keywords={filteredKeywords}
+                />
+              )}
+
+              {/* View 3: Keyword -> Cluster Hierarchy Tree (Rank 3) */}
+              {activeView === 'hierarchy' && (
+                <HierarchicalClusterTree
+                  seed={activeParams.query}
+                  keywords={filteredKeywords}
+                />
+              )}
+
+              {/* View 4: Radial Relationship Graph */}
+              {activeView === 'tree' && (
                 <VisualSearchTree
                   seed={activeParams.query}
                   keywords={filteredKeywords}
