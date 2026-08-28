@@ -6,7 +6,7 @@ import { getExpandedKeywords } from '../autocomplete';
  * Builds an Existing-Page Expansion Plan:
  * Takes any URL from GSC, extracts all queries generating impressions for it,
  * runs autocomplete expansion around them, and identifies the exact missing
- * H2 sections, FAQs, and Title/Meta improvements.
+ * H2 sections and real Google question queries.
  */
 export async function buildPageExpansionPlan(
   pageUrl: string,
@@ -49,26 +49,13 @@ export async function buildPageExpansionPlan(
             targetQuery: item.keyword,
             intent: item.intent,
             relevanceScore: item.relativeScore,
-            suggestedHeading: item.keyword.charAt(0).toUpperCase() + item.keyword.slice(1),
+            suggestedHeading: item.keyword,
             type: isQuestion ? 'faq' : item.relativeScore >= 80 ? 'section' : 'supporting_article',
           };
         });
     } catch (err) {
       console.error('Error expanding page queries:', err);
     }
-  }
-
-  // Generate Title / Meta optimization if top query is underperforming
-  let titleMetaRecommendation: PageExpansionPlan['titleMetaRecommendation'] = undefined;
-  if (topQuery) {
-    const formattedQuery = topQuery.charAt(0).toUpperCase() + topQuery.slice(1);
-    titleMetaRecommendation = {
-      currentTitle: `${formattedQuery} Guide`,
-      recommendedTitle: `${formattedQuery}: Top Tips & Complete Guide (2026)`,
-      currentMeta: `Learn all about ${topQuery} on our website.`,
-      recommendedMeta: `Looking for the best ${topQuery}? Discover proven tips, expert recommendations, and answers to common questions in this comprehensive guide.`,
-      reason: `Primary query "${topQuery}" generates ${totalImp.toLocaleString()} impressions. Including dynamic years and actionable value boosts search CTR.`,
-    };
   }
 
   return {
@@ -78,6 +65,5 @@ export async function buildPageExpansionPlan(
     avgPosition: avgPos,
     currentQueries: pageQueries.slice(0, 15),
     missingSubtopics,
-    titleMetaRecommendation,
   };
 }
