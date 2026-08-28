@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const query = searchParams.get('q') || '';
+    const query = searchParams.get('q') || searchParams.get('seed') || '';
     const country = searchParams.get('country') || 'US';
     const language = searchParams.get('language') || 'en';
     const platform = (searchParams.get('platform') || 'google') as PlatformType;
