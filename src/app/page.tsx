@@ -13,6 +13,8 @@ import { ScatterPlotMatrix } from '@/components/ScatterPlotMatrix';
 import { TreemapOpportunity } from '@/components/TreemapOpportunity';
 import { CanvasNetworkGraph } from '@/components/CanvasNetworkGraph';
 import { ContentBriefModal } from '@/components/ContentBriefModal';
+import { SerpInspectorDrawer } from '@/components/SerpInspectorDrawer';
+import { ContentGapModal } from '@/components/ContentGapModal';
 import { LoadingState } from '@/components/LoadingState';
 import { EmptyState } from '@/components/EmptyState';
 import { FAQ } from '@/components/FAQ';
@@ -52,7 +54,11 @@ export default function Home() {
   const [activeView, setActiveView] = useState<
     'table' | 'bubbles' | 'serp' | 'hierarchy' | 'scatter' | 'treemap' | 'network' | 'tree'
   >('table');
+
+  // Modals & Drawers
   const [isBriefOpen, setIsBriefOpen] = useState<boolean>(false);
+  const [isGapOpen, setIsGapOpen] = useState<boolean>(false);
+  const [inspectedKeyword, setInspectedKeyword] = useState<KeywordItem | null>(null);
 
   const [filters, setFilters] = useState<FilterState>({
     search: '',
@@ -181,9 +187,9 @@ export default function Home() {
             </div>
             <div>
               <span className="font-extrabold text-lg text-slate-900 tracking-tight flex items-center gap-1.5">
-                Keyword Dominator <span className="text-xs bg-blue-100 text-blue-800 font-semibold px-2 py-0.5 rounded-full">Pro Suite</span>
+                Keyword Dominator <span className="text-xs bg-blue-100 text-blue-800 font-semibold px-2 py-0.5 rounded-full">Ahrefs Pro Edition</span>
               </span>
-              <p className="text-[11px] text-slate-500 font-medium">Multi-Platform Autocomplete &amp; Visual Discovery Suite</p>
+              <p className="text-[11px] text-slate-500 font-medium">Multi-Platform Autocomplete &amp; Competitor Gap Intelligence</p>
             </div>
           </div>
 
@@ -202,13 +208,13 @@ export default function Home() {
         <section className="text-center space-y-3 max-w-3xl mx-auto">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-200/60 text-blue-700 text-xs font-bold tracking-wide uppercase">
             <Sparkles className="w-3.5 h-3.5" />
-            Universal Autocomplete &amp; Visual Intelligence Suite
+            Universal Autocomplete &amp; Ahrefs-Grade Explorer
           </div>
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-900 tracking-tight leading-tight">
             Discover Real <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">Search Autocomplete</span> Ideas
           </h1>
           <p className="text-base sm:text-lg text-slate-600 leading-relaxed font-normal">
-            Generate authentic long-tail keyword suggestions from Google, YouTube, Amazon &amp; Bing. Explore 2D scatter opportunity plots, topic treemaps, 60fps canvas network graphs, and SERP overlap matrices.
+            Generate authentic long-tail keyword suggestions from Google, YouTube, Amazon &amp; Bing. Uncover competitor keyword gaps, inspect live SERP top 10 rankings, and export ready-to-rank content briefs.
           </p>
         </section>
 
@@ -395,6 +401,8 @@ export default function Home() {
                     language={activeParams.language}
                     totalBeforeFiltering={keywords.length}
                     onOpenContentBrief={() => setIsBriefOpen(true)}
+                    onOpenContentGap={() => setIsGapOpen(true)}
+                    onInspectSerp={(kw) => setInspectedKeyword(kw)}
                   />
                 </>
               )}
@@ -415,7 +423,7 @@ export default function Home() {
                 />
               )}
 
-              {/* View 4: Canvas Network Graph (Hardware-Accelerated) */}
+              {/* View 4: Canvas Network Graph */}
               {activeView === 'network' && (
                 <CanvasNetworkGraph
                   seed={activeParams.query}
@@ -484,9 +492,9 @@ export default function Home() {
               <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
                 <Sparkles className="w-5 h-5" />
               </div>
-              <h3 className="text-base font-bold text-slate-900">Visual Opportunity Analysis</h3>
+              <h3 className="text-base font-bold text-slate-900">Ahrefs Content Gap Explorer</h3>
               <p className="text-sm text-slate-600 leading-relaxed">
-                Analyze keyword opportunity with 2D scatter plots, market share treemaps, 60fps canvas network graphs, and SERP overlap matrices.
+                Compare your topic against up to 3 competitors in real time to uncover missed long-tail ranking opportunities and inspect live SERP top 10 rankings.
               </p>
             </div>
 
@@ -514,6 +522,19 @@ export default function Home() {
         keywords={filteredKeywords}
         isOpen={isBriefOpen}
         onClose={() => setIsBriefOpen(false)}
+      />
+
+      {/* Ahrefs Content Gap Modal */}
+      <ContentGapModal
+        initialSeed={activeParams.query}
+        isOpen={isGapOpen}
+        onClose={() => setIsGapOpen(false)}
+      />
+
+      {/* Ahrefs 1-Click SERP Inspector Drawer */}
+      <SerpInspectorDrawer
+        keywordItem={inspectedKeyword}
+        onClose={() => setInspectedKeyword(null)}
       />
 
       {/* Footer */}
