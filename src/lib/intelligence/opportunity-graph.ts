@@ -116,14 +116,13 @@ export async function generateSearchOpportunityGraph(
     });
 
     // Domain Topical Relevance Filter
-    // Filter out unrelated generic autocomplete noise (e.g. aquarium terms for AI video domain)
+    // Filter out unrelated generic autocomplete noise (e.g. aquarium/marine terms for AI software domains)
     const filteredExpanded = expanded.keywords.filter((k) => {
       const kwLower = k.keyword.toLowerCase();
-      // If site context is available and keyword diverges completely into unrelated categories
       if (
         siteKeywords.length > 0 &&
-        /(reef tank|aquarium|fish tank|coral|water pump|wave maker reef)/i.test(kwLower) &&
-        !siteKeywords.some((sk) => sk.includes('aquarium') || sk.includes('fish') || sk.includes('reef'))
+        /(reef tank|aquarium|fish tank|coral|water pump|wave maker reef|power head|powerhead|marine tank|bubbler vs|wave maker vs)/i.test(kwLower) &&
+        !siteKeywords.some((sk) => sk.includes('aquarium') || sk.includes('fish') || sk.includes('reef') || sk.includes('pump'))
       ) {
         return false;
       }
