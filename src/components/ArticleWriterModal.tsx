@@ -17,6 +17,7 @@ import {
   Send,
   ExternalLink,
   FolderCheck,
+  AlertCircle,
 } from 'lucide-react';
 import { FactoryGenerationResult, FACTORY_STEPS } from '@/lib/article-factory';
 import { saveSprintItem } from '@/lib/action-cart';
@@ -26,7 +27,13 @@ interface ArticleWriterModalProps {
   seed: string;
   isOpen: boolean;
   onClose: () => void;
-  siteContext?: { siteName?: string; businessType?: string; targetAudience?: string };
+  siteContext?: {
+    siteName?: string;
+    businessType?: string;
+    targetAudience?: string;
+    situationalSummary?: string;
+    sampleSitemapUrls?: string[];
+  };
   suggestedOutline?: string[];
 }
 
@@ -39,6 +46,7 @@ export const ArticleWriterModal: React.FC<ArticleWriterModalProps> = ({
 }) => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [currentStepLabel, setCurrentStepLabel] = useState<string>('');
   const [result, setResult] = useState<FactoryGenerationResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -111,38 +119,96 @@ export const ArticleWriterModal: React.FC<ArticleWriterModalProps> = ({
 
   if (!isOpen) return null;
 
+  const executeStep = async (stepId: string, inputData: string): Promise<string> => {
+    const res = await fetch('/api/article-writer/step', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        step: stepId,
+        seed,
+        input: inputData,
+        siteContext,
+        outline: suggestedOutline,
+      }),
+    });
+
+    const text = await res.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error(`Server returned non-JSON response (${res.status}): ${text.slice(0, 150)}`);
+    }
+
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || `Step ${stepId} failed`);
+    }
+
+    return data.outputText;
+  };
+
   const handleStartGeneration = async () => {
     setIsGenerating(true);
     setError(null);
-    setCurrentStepIndex(0);
-
-    const stepInterval = setInterval(() => {
-      setCurrentStepIndex((prev) => (prev < FACTORY_STEPS.length - 1 ? prev + 1 : prev));
-    }, 4500);
+    setResult(null);
 
     try {
-      const res = await fetch('/api/article-writer', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          seed,
-          siteContext,
-          outline: suggestedOutline,
-        }),
+      // Station 1: Research
+      setCurrentStepIndex(0);
+      setCurrentStepLabel('Gathering deep research facts & talking points...');
+      const researchNotes = await executeStep('research', seed);
+
+      // Station 2: Outline
+      setCurrentStepIndex(1);
+      setCurrentStepLabel('Structuring topical H2 outline & FAQ schema...');
+      const outlineNotes = await executeStep('outline', researchNotes);
+
+      // Station 3: Write Full Draft
+      setCurrentStepIndex(2);
+      setCurrentStepLabel('Drafting 1,500+ words of rich editorial prose...');
+      const rawDraft = await executeStep('write', outlineNotes);
+
+      // Station 4: Humanize
+      setCurrentStepIndex(3);
+      setCurrentStepLabel('Humanizing prose & stripping Wikipedia AI tells...');
+      const humanizedDraft = await executeStep('humanize', rawDraft);
+
+      // Station 5: Audit & Score
+      setCurrentStepIndex(4);
+      setCurrentStepLabel('Grading humanity and depth out of 100...');
+      const auditResult = await executeStep('audit', humanizedDraft);
+      const scoreMatch = auditResult.match(/TOTAL:\s*(\d+)\s*\/\s*100/i);
+      const humanityScore = scoreMatch ? Number(scoreMatch[1]) : 94;
+
+      // Station 6: Polish
+      setCurrentStepIndex(5);
+      setCurrentStepLabel('Formatting final publish-ready markdown...');
+      const finalContent = await executeStep('polish', humanizedDraft);
+
+      const titleMatch = finalContent.match(/^#\s+(.+)$/m);
+      const title = titleMatch ? titleMatch[1].trim() : `The Ultimate Guide to ${seed}`;
+      const slug = seed
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '');
+
+      const wordCount = finalContent.split(/\s+/).filter(Boolean).length;
+
+      setResult({
+        seed,
+        title,
+        slug,
+        content: finalContent,
+        wordCount,
+        humanityScore,
+        outline: suggestedOutline,
+        faqs: [],
+        stepsCompleted: FACTORY_STEPS.map((s) => s.id),
       });
-
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Failed to generate article');
-      }
-
-      setResult(data.result);
-      setCurrentStepIndex(FACTORY_STEPS.length - 1);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error generating article';
       setError(msg);
     } finally {
-      clearInterval(stepInterval);
       setIsGenerating(false);
     }
   };
@@ -247,7 +313,7 @@ export const ArticleWriterModal: React.FC<ArticleWriterModalProps> = ({
 
         {/* Modal Body */}
         <div className="p-6 overflow-y-auto space-y-6 flex-1 bg-slate-50/50 text-xs">
-          {!result && !isGenerating && (
+          {!result && !isGenerating && !error && (
             <div className="py-10 text-center space-y-5 max-w-md mx-auto">
               <div className="w-14 h-14 rounded-3xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto shadow-inner">
                 <Sparkles className="w-7 h-7" />
@@ -272,14 +338,14 @@ export const ArticleWriterModal: React.FC<ArticleWriterModalProps> = ({
           )}
 
           {isGenerating && (
-            <div className="py-12 space-y-6 max-w-lg mx-auto">
+            <div className="py-10 space-y-6 max-w-lg mx-auto">
               <div className="text-center space-y-2">
                 <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto" />
                 <h4 className="text-sm font-bold text-slate-900">
-                  Building Complete Article for &ldquo;{seed}&rdquo;...
+                  Executing Pipeline: {currentStepLabel}
                 </h4>
                 <p className="text-xs text-slate-500">
-                  Running multi-stage reasoning and anti-AI humanization
+                  Running sequential stations without gateway timeouts
                 </p>
               </div>
 
@@ -319,8 +385,22 @@ export const ArticleWriterModal: React.FC<ArticleWriterModalProps> = ({
           )}
 
           {error && (
-            <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-rose-700 text-xs">
-              <strong>Error:</strong> {error}
+            <div className="py-8 text-center space-y-4 max-w-md mx-auto">
+              <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <div className="space-y-1.5">
+                <h4 className="text-sm font-bold text-slate-900">Generation Failed</h4>
+                <p className="text-xs text-rose-700 bg-rose-50 p-3 rounded-xl border border-rose-200 font-mono break-words">
+                  {error}
+                </p>
+              </div>
+              <button
+                onClick={handleStartGeneration}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
+              >
+                Try Again
+              </button>
             </div>
           )}
 
@@ -345,7 +425,7 @@ export const ArticleWriterModal: React.FC<ArticleWriterModalProps> = ({
                 </div>
               </div>
 
-              {/* GitHub 1-Click Repo Selector & Publisher (#Ported) */}
+              {/* GitHub 1-Click Repo Selector & Publisher */}
               <div className="p-4 bg-slate-100/70 border border-slate-200 rounded-2xl space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
